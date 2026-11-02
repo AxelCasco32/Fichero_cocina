@@ -1,0 +1,27 @@
+# Dependencias (se reinstalan con npm install)
+node_modules/
+
+# Configuración local con claves: NUNCA se sube
+.env
+.env.*
+!.env.example
+
+# Compilado del frontend (se genera con npm run build)
+client/dist/
+
+# Logs y temporales
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Backups de la base y datos del reloj (contienen datos personales)
+backups/
+dump/
+*.bson
+*.gz
+*.zip
+
+# Editores
+.vscode/
+.idea/
