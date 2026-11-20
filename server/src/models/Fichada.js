@@ -4,6 +4,7 @@ const RESULTADOS = [
   'autorizado', // puede retirar
   'no_autorizado', // existe pero está deshabilitado
   'ya_retiro', // ya retiró en este servicio hoy
+  'limite_diario', // ya alcanzó el máximo de retiros del día (MAX_RETIROS_DIA)
   'fuera_de_horario', // no hay servicio en esa franja
   'servicio_no_habilitado', // el servicio no está en su lista
   'desconocido', // el PIN no existe en la base
@@ -40,6 +41,7 @@ const fichadaSchema = new Schema(
 fichadaSchema.index({ deviceSn: 1, pin: 1, fecha: 1 }, { unique: true });
 fichadaSchema.index({ fecha: -1 });
 fichadaSchema.index({ pin: 1, dia: 1, servicio: 1 });
+fichadaSchema.index({ pin: 1, dia: 1, resultado: 1 });
 
 module.exports = model('Fichada', fichadaSchema);
 module.exports.RESULTADOS = RESULTADOS;

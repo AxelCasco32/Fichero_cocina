@@ -4,6 +4,7 @@ export const TZ = 'America/Argentina/Buenos_Aires';
 export const RESULTADOS = {
   autorizado: { texto: 'Autorizado', tono: 'ok' },
   ya_retiro: { texto: 'Ya retiró', tono: 'warn' },
+  limite_diario: { texto: 'Límite diario alcanzado', tono: 'err' },
   no_autorizado: { texto: 'No autorizado', tono: 'err' },
   servicio_no_habilitado: { texto: 'Servicio no habilitado', tono: 'err' },
   desconocido: { texto: 'No registrado', tono: 'err' },

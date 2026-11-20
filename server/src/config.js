@@ -20,6 +20,8 @@ module.exports = {
   deviceTzHours: Number(process.env.DEVICE_TZ_HOURS || -3),
   snPermitidos: lista(process.env.ADMS_SN_PERMITIDOS),
   dedupSegundos: Number(process.env.DEDUP_SEGUNDOS || 60),
+  // Máximo de retiros autorizados por persona por día (0 = sin límite)
+  maxRetirosDia: Number(process.env.MAX_RETIROS_DIA ?? 3),
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   // Un equipo se considera "en línea" si consultó al servidor en este lapso
   onlineSegundos: Number(process.env.ONLINE_SEGUNDOS || 120),

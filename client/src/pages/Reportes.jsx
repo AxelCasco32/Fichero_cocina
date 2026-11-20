@@ -18,7 +18,7 @@ function GraficoPorHora({ horas }) {
       <div className="grafico" role="img" aria-label="Fichadas por hora">
         {visibles.map((h) => {
           const ok = h.autorizado || 0;
-          const err = (h.no_autorizado || 0) + (h.desconocido || 0) + (h.servicio_no_habilitado || 0) + (h.ya_retiro || 0);
+          const err = (h.no_autorizado || 0) + (h.desconocido || 0) + (h.servicio_no_habilitado || 0) + (h.ya_retiro || 0) + (h.limite_diario || 0);
           const otro = h.total - ok - err;
           const alto = (n) => `${(n / max) * 100}%`;
           return (
@@ -196,6 +196,7 @@ export default function Reportes() {
                 <th>Servicio</th>
                 <th>Retiraron</th>
                 <th>Ya habían retirado</th>
+                <th>Límite diario</th>
                 <th>No autorizados</th>
                 <th>No registrados</th>
                 <th>Total</th>
@@ -209,6 +210,7 @@ export default function Reportes() {
                   </td>
                   <td>{s.porResultado.autorizado || 0}</td>
                   <td>{s.porResultado.ya_retiro || 0}</td>
+                  <td>{s.porResultado.limite_diario || 0}</td>
                   <td>{(s.porResultado.no_autorizado || 0) + (s.porResultado.servicio_no_habilitado || 0)}</td>
                   <td>{s.porResultado.desconocido || 0}</td>
                   <td>{s.total}</td>

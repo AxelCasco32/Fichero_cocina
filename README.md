@@ -170,6 +170,10 @@ Eventos de Socket.io (conectar con `auth: { token }`): `fichada`, `dispositivo`,
   biometría en el reloj. La baja (DELETE) borra a la persona del equipo, y si vuelve hay que
   enrolarla de nuevo.
 - **Horarios de servicio** en `server/src/catalogos/servicios.js`.
+- **Límite diario:** cada persona puede tener como máximo `MAX_RETIROS_DIA` fichadas aceptadas por día
+  (3 por defecto, sumando todos los servicios). Desde la siguiente, la fichada queda como *Límite diario
+  alcanzado* (rojo y pitido en el monitor). Las anuladas no cuentan. `0` = sin límite. El control lo hace
+  el sistema: el MB360 no tiene un contador por día y sigue mostrando "verificado" en pantalla.
 - **Doble toque:** si la misma persona ficha dos veces en menos de `DEDUP_SEGUNDOS`, la segunda
   se ignora.
 - **Biometría:** las plantillas que sube el reloj se guardan como respaldo (colección
