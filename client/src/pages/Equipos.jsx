@@ -9,13 +9,193 @@ import { fechaHora, hoy } from '../util.js';
 const TONO_COMANDO = { ok: 'ok', error: 'err', pendiente: 'warn', enviado: 'muted' };
 const ESTADO_COMANDO = { ok: 'aplicado', error: 'error', pendiente: 'en cola', enviado: 'enviado' };
 
+// Tipos de equipo: completan la configuración de conexión recomendada
+const TIPOS = [
+  { id: 'nuevo', texto: 'MB360 u otro equipo nuevo (firmware 8)', modelo: 'MB360', protocolo: 'auto', formato: 'auto' },
+  { id: 'viejo', texto: '628-C u otro equipo antiguo (firmware 6)', modelo: '628-C', protocolo: 'auto', formato: 'viejo' },
+  { id: 'otro', texto: 'Otro / no sé (detectar automáticamente)', modelo: '', protocolo: 'auto', formato: 'auto' },
+];
+const TEXTO_FORMATO = { nuevo: 'Nuevo (firmware 8)', viejo: 'Antiguo (firmware 6)' };
+const TEXTO_PROTOCOLO = { auto: 'Automática (TCP y si no, UDP)', tcp: 'TCP', udp: 'UDP' };
+
+// --- Alta / edición de un equipo ---
+function FormEquipo({ inicial, onCerrar, onGuardado }) {
+  const editando = !!inicial;
+  const directo = !editando || inicial.modo === '4370';
+  const [f, setF] = useState(() => ({
+    nombre: inicial?.nombre || '',
+    modelo: inicial?.modelo || 'MB360',
+    ip: inicial?.ip || '',
+    puerto: String(inicial?.puerto || 4370),
+    protocolo: inicial?.protocolo || 'auto',
+    formato: inicial?.formato || 'auto',
+    habilitado: inicial?.habilitado !== false,
+  }));
+  const [tipo, setTipo] = useState(inicial?.formato === 'viejo' ? 'viejo' : inicial ? 'otro' : 'nuevo');
+  const [prueba, setPrueba] = useState(null);
+  const [error, setError] = useState('');
+  const [ocupado, setOcupado] = useState('');
+
+  const set = (k) => (e) => {
+    setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
+    setPrueba(null);
+  };
+
+  function elegirTipo(id) {
+    const t = TIPOS.find((x) => x.id === id);
+    setTipo(id);
+    setPrueba(null);
+    setF({ ...f, protocolo: t.protocolo, formato: t.formato, modelo: t.modelo || f.modelo });
+  }
+
+  const conexion = () => ({ ip: f.ip.trim(), puerto: Number(f.puerto), protocolo: f.protocolo, formato: f.formato });
+
+  async function probar() {
+    setError('');
+    setPrueba(null);
+    setOcupado('probando');
+    try {
+      setPrueba(await api('/dispositivos/probar', { method: 'POST', body: conexion() }));
+    } catch (e) {
+      setError(e.message);
+    }
+    setOcupado('');
+  }
+
+  async function guardar(e) {
+    e.preventDefault();
+    setError('');
+    setOcupado('guardando');
+    const datos = { nombre: f.nombre.trim(), modelo: f.modelo.trim(), ...(directo ? { ...conexion(), habilitado: f.habilitado } : {}) };
+    try {
+      const r = editando
+        ? await api(`/dispositivos/${encodeURIComponent(inicial.sn)}`, { method: 'PUT', body: datos })
+        : await api('/dispositivos', { method: 'POST', body: datos });
+      onGuardado(r, editando);
+    } catch (err) {
+      setError(err.message);
+      setOcupado('');
+    }
+  }
+
+  return (
+    <div className="fondo-modal" onMouseDown={(e) => e.target === e.currentTarget && onCerrar()}>
+      <form className="modal" onSubmit={guardar}>
+        <h2>{editando ? `Editar: ${inicial.nombre}` : 'Agregar equipo'}</h2>
+        {error && <div className="error">{error}</div>}
+
+        {directo && (
+          <label className="campo">
+            Tipo de equipo
+            <select value={tipo} onChange={(e) => elegirTipo(e.target.value)}>
+              {TIPOS.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.texto}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <div className="grilla dos" style={{ marginTop: '0.75rem' }}>
+          <label className="campo">
+            Nombre
+            <input value={f.nombre} onChange={set('nombre')} placeholder="Ej.: Reloj comedor planta baja" />
+          </label>
+          <label className="campo">
+            Modelo
+            <input value={f.modelo} onChange={set('modelo')} placeholder="Ej.: 628-C" />
+          </label>
+        </div>
+
+        {directo && (
+          <>
+            <div className="grilla dos" style={{ marginTop: '0.75rem' }}>
+              <label className="campo">
+                IP del reloj
+                <input value={f.ip} onChange={set('ip')} placeholder="192.168.1.201" required />
+                <span className="ayuda">En el equipo: Menú → Comunicación → Red</span>
+              </label>
+              <label className="campo">
+                Puerto
+                <input type="number" min="1" max="65535" value={f.puerto} onChange={set('puerto')} required />
+                <span className="ayuda">Casi siempre 4370</span>
+              </label>
+            </div>
+
+            <details style={{ marginTop: '0.75rem' }}>
+              <summary>Opciones avanzadas</summary>
+              <div className="grilla dos" style={{ marginTop: '0.5rem' }}>
+                <label className="campo">
+                  Conexión
+                  <select value={f.protocolo} onChange={set('protocolo')}>
+                    {Object.entries(TEXTO_PROTOCOLO).map(([k, v]) => (
+                      <option key={k} value={k}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="ayuda">Los equipos antiguos suelen usar solo UDP</span>
+                </label>
+                <label className="campo">
+                  Formato de datos
+                  <select value={f.formato} onChange={set('formato')}>
+                    <option value="auto">Detectar automáticamente</option>
+                    <option value="nuevo">{TEXTO_FORMATO.nuevo}</option>
+                    <option value="viejo">{TEXTO_FORMATO.viejo}</option>
+                  </select>
+                </label>
+              </div>
+            </details>
+
+            {editando && (
+              <label className="check" style={{ marginTop: '0.75rem' }}>
+                <input type="checkbox" checked={f.habilitado} onChange={set('habilitado')} />
+                Habilitado (si lo destildás, el sistema deja de conectarse a este equipo)
+              </label>
+            )}
+
+            {prueba && (
+              <div className="aviso" style={{ background: 'var(--ok-bg)', color: 'var(--ok)', marginTop: '0.75rem' }}>
+                ✔ Conectado por {prueba.protocolo.toUpperCase()}. N.º de serie: <strong>{prueba.numeroSerie || 'no informa'}</strong>
+                {' · '}Firmware: {prueba.firmware || '—'}
+                {' · '}Formato: {TEXTO_FORMATO[prueba.formato] || prueba.formato}
+                {' · '}
+                {prueba.usuarios ?? '—'} usuarios, {prueba.fichadas ?? '—'} fichadas guardadas
+              </div>
+            )}
+            <p style={{ fontSize: '0.85rem', color: 'var(--suave)' }}>
+              La clave de comunicación del reloj tiene que estar en 0, y el software de ZKTeco no debería estar conectado al
+              mismo tiempo.
+            </p>
+          </>
+        )}
+
+        <div className="modal-pie">
+          <button type="button" onClick={onCerrar}>
+            Cancelar
+          </button>
+          {directo && (
+            <button type="button" onClick={probar} disabled={!!ocupado || !f.ip.trim()}>
+              {ocupado === 'probando' ? 'Probando…' : 'Probar conexión'}
+            </button>
+          )}
+          <button className="primario" disabled={!!ocupado}>
+            {ocupado === 'guardando' ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // --- Base vs. reloj ---
 function Comparacion({ equipo, onAviso, onError, version }) {
   const [datos, setDatos] = useState(null);
   const [vista, setVista] = useState('soloBase');
 
   const cargar = useCallback(() => {
-    api(`/dispositivos/${equipo.sn}/comparacion`).then(setDatos).catch((e) => onError(e.message));
+    api(`/dispositivos/${encodeURIComponent(equipo.sn)}/comparacion`).then(setDatos).catch((e) => onError(e.message));
   }, [equipo.sn, onError]);
 
   useEffect(cargar, [cargar, version]);
@@ -54,7 +234,7 @@ function Comparacion({ equipo, onAviso, onError, version }) {
           disabled={datos.leyendo}
           onClick={() =>
             hacer(
-              `/dispositivos/${equipo.sn}/acciones/consultar-usuarios`,
+              `/dispositivos/${encodeURIComponent(equipo.sn)}/acciones/consultar-usuarios`,
               'Se pidió la lista al reloj. Se actualiza sola en unos segundos.'
             )
           }
@@ -124,7 +304,7 @@ function Comparacion({ equipo, onAviso, onError, version }) {
                   <button
                     className="chico primario"
                     onClick={() =>
-                      hacer(`/dispositivos/${equipo.sn}/usuarios/${u.pin}/enviar`, `${u.nombre} enviado al reloj`)
+                      hacer(`/dispositivos/${encodeURIComponent(equipo.sn)}/usuarios/${u.pin}/enviar`, `${u.nombre} enviado al reloj`)
                     }
                   >
                     Enviar al reloj
@@ -135,7 +315,7 @@ function Comparacion({ equipo, onAviso, onError, version }) {
                     className="chico peligro"
                     onClick={() =>
                       window.confirm(`¿Borrar a ${u.nombre || u.nombreReloj} (PIN ${u.pin}) del reloj?`) &&
-                      hacer(`/dispositivos/${equipo.sn}/usuarios/${u.pin}/borrar`, `PIN ${u.pin} se borra del reloj`)
+                      hacer(`/dispositivos/${encodeURIComponent(equipo.sn)}/usuarios/${u.pin}/borrar`, `PIN ${u.pin} se borra del reloj`)
                     }
                   >
                     Borrar del reloj
@@ -145,7 +325,7 @@ function Comparacion({ equipo, onAviso, onError, version }) {
                   <button
                     className="chico"
                     onClick={() =>
-                      hacer(`/dispositivos/${equipo.sn}/usuarios/${u.pin}/enviar`, `Nombre de ${u.nombre} actualizado en el reloj`)
+                      hacer(`/dispositivos/${encodeURIComponent(equipo.sn)}/usuarios/${u.pin}/enviar`, `Nombre de ${u.nombre} actualizado en el reloj`)
                     }
                   >
                     Corregir nombre
@@ -171,7 +351,7 @@ function Comparacion({ equipo, onAviso, onError, version }) {
 function Comandos({ sn, version }) {
   const [comandos, setComandos] = useState([]);
   useEffect(() => {
-    api(`/dispositivos/${sn}/comandos`).then(setComandos).catch(() => {});
+    api(`/dispositivos/${encodeURIComponent(sn)}/comandos`).then(setComandos).catch(() => {});
   }, [sn, version]);
   return (
     <table>
@@ -214,14 +394,14 @@ function Comandos({ sn, version }) {
 }
 
 // --- Panel de un equipo ---
-function Equipo({ eq, esAdmin, onAviso, onError, recargarLista, version }) {
+function Equipo({ eq, esAdmin, onAviso, onError, recargarLista, version, onEditar }) {
   const [pestania, setPestania] = useState('usuarios');
   const [rango, setRango] = useState({ desde: hoy(), hasta: hoy() });
 
   async function accion(nombre, texto, { body, confirmar } = {}) {
     for (const c of [].concat(confirmar || [])) if (!window.confirm(c)) return;
     try {
-      await api(`/dispositivos/${eq.sn}/acciones/${nombre}`, { method: 'POST', body });
+      await api(`/dispositivos/${encodeURIComponent(eq.sn)}/acciones/${nombre}`, { method: 'POST', body });
       onAviso(texto);
       recargarLista();
     } catch (e) {
@@ -232,7 +412,7 @@ function Equipo({ eq, esAdmin, onAviso, onError, recargarLista, version }) {
   async function sincronizar() {
     if (!window.confirm('Se van a reenviar al reloj todos los comensales activos, con su rostro/huella si hay respaldo. ¿Continuar?')) return;
     try {
-      const r = await api(`/dispositivos/${eq.sn}/sincronizar`, { method: 'POST' });
+      const r = await api(`/dispositivos/${encodeURIComponent(eq.sn)}/sincronizar`, { method: 'POST' });
       onAviso(`Se enviaron ${r.usuarios} comensales al reloj (${r.encolados} comandos)`);
       recargarLista();
     } catch (e) {
@@ -240,11 +420,23 @@ function Equipo({ eq, esAdmin, onAviso, onError, recargarLista, version }) {
     }
   }
 
-  async function renombrar() {
-    const nombre = window.prompt('Nombre del equipo', eq.nombre);
-    if (!nombre) return;
+  async function cambiarHabilitado() {
+    const habilitar = eq.habilitado === false;
+    if (!habilitar && !window.confirm(`¿Deshabilitar ${eq.nombre}? El sistema deja de conectarse y de mandarle altas y bajas.`)) return;
     try {
-      await api(`/dispositivos/${eq.sn}`, { method: 'PUT', body: { nombre } });
+      await api(`/dispositivos/${encodeURIComponent(eq.sn)}`, { method: 'PUT', body: { habilitado: habilitar } });
+      onAviso(habilitar ? `${eq.nombre} habilitado: se conecta en unos segundos` : `${eq.nombre} deshabilitado`);
+      recargarLista();
+    } catch (e) {
+      onError(e.message);
+    }
+  }
+
+  async function quitar() {
+    if (!window.confirm(`¿Quitar ${eq.nombre} del sistema? Las fichadas que ya trajo se conservan.`)) return;
+    try {
+      await api(`/dispositivos/${encodeURIComponent(eq.sn)}`, { method: 'DELETE' });
+      onAviso(`${eq.nombre} se quitó del sistema`);
       recargarLista();
     } catch (e) {
       onError(e.message);
@@ -252,35 +444,70 @@ function Equipo({ eq, esAdmin, onAviso, onError, recargarLista, version }) {
   }
 
   const info = eq.info || {};
+  const deshabilitado = eq.habilitado === false;
 
   return (
     <div className="panel">
       <div className="fila entre">
         <h2 style={{ margin: 0 }}>
           {eq.nombre}{' '}
-          <span className={`tag ${eq.enLinea ? 'ok' : 'err'}`}>{eq.enLinea ? 'En línea' : 'Sin conexión'}</span>{' '}
+          {deshabilitado ? (
+            <span className="tag muted">Deshabilitado</span>
+          ) : (
+            <span className={`tag ${eq.enLinea ? 'ok' : 'err'}`}>{eq.enLinea ? 'En línea' : 'Sin conexión'}</span>
+          )}{' '}
           {eq.comandosPendientes > 0 && <span className="tag warn">{eq.comandosPendientes} comandos en cola</span>}
         </h2>
         {esAdmin && (
-          <button className="chico" onClick={renombrar}>
-            Renombrar
-          </button>
+          <span className="fila" style={{ gap: '0.4rem' }}>
+            <button className="chico" onClick={() => onEditar(eq)}>
+              Editar
+            </button>
+            {eq.modo === '4370' && (
+              <button className="chico" onClick={cambiarHabilitado}>
+                {deshabilitado ? 'Habilitar' : 'Deshabilitar'}
+              </button>
+            )}
+            <button className="chico peligro" onClick={quitar}>
+              Quitar
+            </button>
+          </span>
         )}
       </div>
+
+      {!eq.enLinea && !deshabilitado && eq.ultimoError && (
+        <div className="error" style={{ marginTop: '0.75rem' }}>
+          No se puede conectar: {eq.ultimoError} ({fechaHora(eq.ultimoErrorEn)}). Revisá que el equipo esté prendido, la IP y
+          el puerto, y que la clave de comunicación esté en 0.
+        </div>
+      )}
 
       <div className="datos-equipo">
         <div>
           <small>N.º de serie</small>
-          {eq.sn}
+          {/^IP-/.test(eq.sn) ? 'todavía no informado' : eq.sn}
+        </div>
+        <div>
+          <small>Modelo</small>
+          {eq.modelo || '—'}
         </div>
         <div>
           <small>IP</small>
           {eq.ip || '—'}
+          {eq.modo === '4370' && eq.puerto && eq.puerto !== 4370 ? `:${eq.puerto}` : ''}
         </div>
         <div>
           <small>Conexión</small>
-          {eq.modo === '4370' ? 'Directa (puerto 4370)' : 'ADMS (el reloj llama)'}
+          {eq.modo === '4370'
+            ? `Directa (puerto ${eq.puerto || 4370})${eq.protocoloDetectado ? ` · ${eq.protocoloDetectado.toUpperCase()}` : ''}`
+            : 'ADMS (el reloj llama)'}
         </div>
+        {eq.modo === '4370' && (
+          <div>
+            <small>Formato de datos</small>
+            {TEXTO_FORMATO[eq.formatoDetectado] || (eq.formato === 'auto' ? 'a detectar' : TEXTO_FORMATO[eq.formato])}
+          </div>
+        )}
         <div>
           <small>Firmware</small>
           {eq.firmware || info.FWVersion || '—'}
@@ -310,7 +537,7 @@ function Equipo({ eq, esAdmin, onAviso, onError, recargarLista, version }) {
             onClick={async () => {
               if (!window.confirm('¿Cancelar los comandos que el reloj todavía no aplicó?')) return;
               try {
-                const r = await api(`/dispositivos/${eq.sn}/comandos/cancelar`, { method: 'POST' });
+                const r = await api(`/dispositivos/${encodeURIComponent(eq.sn)}/comandos/cancelar`, { method: 'POST' });
                 onAviso(`Se cancelaron ${r.cancelados} comandos`);
                 recargarLista();
               } catch (e) {
@@ -391,6 +618,7 @@ export default function Equipos() {
   const [error, setError] = useState('');
   const [mensaje, setMensaje] = useState('');
   const [version, setVersion] = useState(0);
+  const [form, setForm] = useState(null); // null | { equipo } (equipo null = agregar)
 
   const cargar = useCallback(() => {
     api('/dispositivos')
@@ -418,18 +646,31 @@ export default function Equipos() {
   }, []);
   const onError = useCallback((t) => setError(t), []);
 
+  function guardado(eq, editando) {
+    setForm(null);
+    onAviso(editando ? 'Cambios guardados' : `${eq.nombre} agregado: el sistema se conecta en unos segundos`);
+    cargar();
+  }
+
   return (
     <>
-      <h1>Equipos</h1>
+      <div className="fila entre">
+        <h1>Equipos</h1>
+        {esAdmin && (
+          <button className="primario" onClick={() => setForm({ equipo: null })}>
+            + Agregar equipo
+          </button>
+        )}
+      </div>
       {error && <div className="error">{error}</div>}
       {mensaje && <div className="aviso" style={{ background: 'var(--ok-bg)', color: 'var(--ok)' }}>{mensaje}</div>}
 
       {!equipos.length && (
         <div className="panel">
-          <p>Todavía no se conectó ningún reloj.</p>
+          <p>Todavía no hay ningún reloj.</p>
           <p>
-            En el MB360 entrá a <strong>Menú → Comunicación → Servidor en la nube (ADMS)</strong> y cargá la IP de este
-            servidor y el puerto <strong>4000</strong>. A los pocos segundos aparece acá.
+            Usá <strong>Agregar equipo</strong> y cargá la IP del reloj (sirve para el MB360 y para equipos antiguos como el
+            628-C). El sistema se conecta por el puerto 4370.
           </p>
         </div>
       )}
@@ -443,8 +684,11 @@ export default function Equipos() {
           onError={onError}
           recargarLista={cargar}
           version={version}
+          onEditar={(equipo) => setForm({ equipo })}
         />
       ))}
+
+      {form && <FormEquipo inicial={form.equipo} onCerrar={() => setForm(null)} onGuardado={guardado} />}
     </>
   );
 }

@@ -39,7 +39,8 @@ function textoRestaurarPlantilla(p) {
 
 async function snsDestino(deviceSn) {
   if (deviceSn) return [deviceSn];
-  const disp = await Dispositivo.find({}, 'sn').lean();
+  // Los equipos deshabilitados no reciben altas/bajas (al habilitarlos: "Enviar todos los comensales")
+  const disp = await Dispositivo.find({ habilitado: { $ne: false } }, 'sn').lean();
   return disp.map((d) => d.sn);
 }
 

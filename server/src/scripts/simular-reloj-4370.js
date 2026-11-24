@@ -1,15 +1,25 @@
 // Simula un reloj ZKTeco hablando el protocolo del puerto 4370, para probar el modo 4370 sin el equipo.
 //
-// Uso:  node src/scripts/simular-reloj-4370.js [puerto=4370]
+// Uso:  node src/scripts/simular-reloj-4370.js [puerto=4370] [--viejo] [--registro=8]
+//   - Sin opciones simula un equipo nuevo (MB360): TCP, usuarios de 72 bytes, fichadas de 40.
+//   - --viejo simula un equipo antiguo (628-C, firmware 6): solo UDP, usuarios de 28 bytes y
+//     fichadas de 16 bytes (o de 8 con --registro=8).
 //   - Arranca con 3 usuarios y algunas fichadas de ayer.
 //   - Para "fichar":  curl "http://localhost:4371/fichar?pin=1001"   (puerto + 1)
 //   - Para ver su memoria:  curl http://localhost:4371/estado
+//
+// Para probar los dos a la vez: uno en 4370 y el viejo en otro puerto, por ejemplo
+//   node src/scripts/simular-reloj-4370.js 4380 --viejo     (fichar: curl "http://localhost:4381/fichar?pin=1001")
 
 const net = require('net');
+const dgram = require('dgram');
 const http = require('http');
 
-const PUERTO = Number(process.argv[2] || 4370);
-const SN = 'SIM4370';
+const args = process.argv.slice(2);
+const PUERTO = Number(args.find((x) => /^\d+$/.test(x)) || 4370);
+const VIEJO = args.includes('--viejo');
+const REGISTRO = VIEJO ? (args.includes('--registro=8') ? 8 : 16) : 40;
+const SN = VIEJO ? 'SIMVIEJO' : 'SIM4370';
 
 const C = {
   CONNECT: 1000, EXIT: 1001, ACK_OK: 2000, OPTIONS_RRQ: 11, GET_VERSION: 1100, FREE_SIZES: 50,
@@ -39,113 +49,150 @@ function codificarFecha(d) {
   );
 }
 
-function trama(cmd, sesion, reply, datos = Buffer.alloc(0)) {
+// Encabezado del protocolo: comando, checksum (el sistema no lo verifica), sesión, n.º de respuesta
+function paquete(cmd, sesion, reply, datos = Buffer.alloc(0)) {
   const cuerpo = Buffer.alloc(8 + datos.length);
   cuerpo.writeUInt16LE(cmd, 0);
   cuerpo.writeUInt16LE(sesion, 4);
   cuerpo.writeUInt16LE(reply, 6);
   datos.copy(cuerpo, 8);
+  return cuerpo;
+}
+
+// Por TCP cada paquete va precedido de 8 bytes con una marca y el largo
+function tramaTcp(cuerpo) {
   const pre = Buffer.from([0x50, 0x50, 0x82, 0x7d, 0, 0, 0, 0]);
   pre.writeUInt32LE(cuerpo.length, 4);
   return Buffer.concat([pre, cuerpo]);
 }
 
+const conTotal = (regs, tam) => {
+  const total = Buffer.alloc(4);
+  total.writeUInt32LE(regs.length * tam, 0);
+  return Buffer.concat([total, ...regs]);
+};
+const leerTexto = (b) => b.toString('latin1').replace(/\0.*$/s, '');
+
 function bloqueUsuarios() {
+  const tam = VIEJO ? 28 : 72;
   const regs = [...usuarios.values()].map((u) => {
-    const b = Buffer.alloc(72);
+    const b = Buffer.alloc(tam);
     b.writeUInt16LE(u.uid, 0);
-    b.write(u.nombre, 11, 24, 'latin1');
-    b.write(u.pin, 48, 9, 'latin1');
+    if (VIEJO) {
+      b.write(u.nombre.slice(0, 8), 8, 8, 'latin1');
+      b.writeUInt32LE(Number(u.pin), 24);
+    } else {
+      b.write(u.nombre, 11, 24, 'latin1');
+      b.write(u.pin, 48, 9, 'latin1');
+    }
     return b;
   });
-  const total = Buffer.alloc(4);
-  total.writeUInt32LE(regs.length * 72, 0);
-  return Buffer.concat([total, ...regs]);
+  return conTotal(regs, tam);
 }
 
 function bloqueFichadas() {
+  const uidPorPin = new Map([...usuarios.values()].map((u) => [u.pin, u.uid]));
   const regs = fichadas.map((f, i) => {
-    const b = Buffer.alloc(40);
-    b.writeUInt16LE(i + 1, 0);
-    b.write(f.pin, 2, 9, 'latin1');
-    b.writeUInt8(15, 26); // verificación: rostro
-    b.writeUInt32LE(codificarFecha(f.fecha), 27);
+    const b = Buffer.alloc(REGISTRO);
+    if (REGISTRO === 40) {
+      b.writeUInt16LE(i + 1, 0);
+      b.write(f.pin, 2, 9, 'latin1');
+      b.writeUInt8(15, 26); // verificación: rostro
+      b.writeUInt32LE(codificarFecha(f.fecha), 27);
+    } else if (REGISTRO === 16) {
+      b.writeUInt32LE(Number(f.pin), 0);
+      b.writeUInt32LE(codificarFecha(f.fecha), 4);
+      b.writeUInt8(1, 8); // verificación: huella
+    } else {
+      b.writeUInt16LE(uidPorPin.get(f.pin) || 0, 0); // los de 8 bytes guardan el n.º interno
+      b.writeUInt8(1, 2);
+      b.writeUInt32LE(codificarFecha(f.fecha), 3);
+    }
     return b;
   });
-  const total = Buffer.alloc(4);
-  total.writeUInt32LE(regs.length * 40, 0);
-  return Buffer.concat([total, ...regs]);
+  return conTotal(regs, REGISTRO);
 }
 
-net
-  .createServer((sock) => {
-    let pendiente = Buffer.alloc(0);
-    sock.on('error', () => {});
-    sock.on('data', (chunk) => {
-      pendiente = Buffer.concat([pendiente, chunk]);
-      while (pendiente.length >= 8) {
-        const largo = pendiente.readUInt32LE(4);
-        if (pendiente.length < 8 + largo) return;
-        const p = pendiente.subarray(8, 8 + largo);
-        pendiente = pendiente.subarray(8 + largo);
-        const cmd = p.readUInt16LE(0);
-        const reply = p.readUInt16LE(6);
-        const datos = p.subarray(8);
-        const ok = (d) => sock.write(trama(C.ACK_OK, 1, reply, d));
+// Atiende un comando y devuelve el paquete de respuesta (o null si hay que cortar)
+function responder(p, cortar) {
+  const cmd = p.readUInt16LE(0);
+  const reply = p.readUInt16LE(6);
+  const datos = p.subarray(8);
+  const ok = (d) => paquete(C.ACK_OK, 1, reply, d);
 
-        switch (cmd) {
-          case C.OPTIONS_RRQ: {
-            const clave = datos.toString('latin1').replace(/\0/g, '');
-            ok(Buffer.from(clave === '~SerialNumber' ? `~SerialNumber=${SN}\0` : `${clave}=\0`, 'latin1'));
-            break;
-          }
-          case C.GET_VERSION:
-            ok(Buffer.from('Ver 8.0.4.6-SIM\0'));
-            break;
-          case C.FREE_SIZES: {
-            const d = Buffer.alloc(80);
-            d.writeUInt32LE(usuarios.size, 16);
-            d.writeUInt32LE(fichadas.length, 32);
-            ok(d);
-            break;
-          }
-          case C.DATA_WRRQ: {
-            const tipo = datos[1];
-            sock.write(trama(C.DATA, 1, reply, tipo === 0x09 ? bloqueUsuarios() : bloqueFichadas()));
-            break;
-          }
-          case C.USER_WRQ: {
-            const uid = datos.readUInt16LE(0);
-            const nombre = datos.subarray(11, 35).toString('latin1').replace(/\0.*$/s, '');
-            const pin = datos.subarray(48, 72).toString('latin1').replace(/\0.*$/s, '');
-            usuarios.set(uid, { uid, pin, nombre });
-            console.log(`[reloj] alta/modificación: uid ${uid} PIN ${pin} "${nombre}"`);
-            ok();
-            break;
-          }
-          case C.DELETE_USER: {
-            const uid = datos.readUInt16LE(0);
-            console.log(`[reloj] baja: uid ${uid} PIN ${usuarios.get(uid)?.pin}`);
-            usuarios.delete(uid);
-            ok();
-            break;
-          }
-          case C.CLEAR_ATTLOG:
-            fichadas.length = 0;
-            console.log('[reloj] memoria de fichadas vaciada');
-            ok();
-            break;
-          case C.EXIT:
-            ok();
-            sock.end();
-            break;
-          default:
-            ok();
+  switch (cmd) {
+    case C.OPTIONS_RRQ: {
+      const clave = datos.toString('latin1').replace(/\0/g, '');
+      return ok(Buffer.from(clave === '~SerialNumber' ? `~SerialNumber=${SN}\0` : `${clave}=\0`, 'latin1'));
+    }
+    case C.GET_VERSION:
+      return ok(Buffer.from(VIEJO ? 'Ver 6.60 Sep 27 2010\0' : 'Ver 8.0.4.6-SIM\0'));
+    case C.FREE_SIZES: {
+      const d = Buffer.alloc(80);
+      d.writeUInt32LE(usuarios.size, 16);
+      d.writeUInt32LE(fichadas.length, 32);
+      return ok(d);
+    }
+    case C.DATA_WRRQ:
+      return paquete(C.DATA, 1, reply, datos[1] === 0x09 ? bloqueUsuarios() : bloqueFichadas());
+    case C.USER_WRQ: {
+      const uid = datos.readUInt16LE(0);
+      const nombre = VIEJO ? leerTexto(datos.subarray(8, 16)) : leerTexto(datos.subarray(11, 35));
+      const pin = VIEJO ? String(datos.readUInt32LE(24)) : leerTexto(datos.subarray(48, 72));
+      usuarios.set(uid, { uid, pin, nombre });
+      console.log(`[reloj] alta/modificación: uid ${uid} PIN ${pin} "${nombre}" (${datos.length} bytes)`);
+      return ok();
+    }
+    case C.DELETE_USER: {
+      const uid = datos.readUInt16LE(0);
+      console.log(`[reloj] baja: uid ${uid} PIN ${usuarios.get(uid)?.pin}`);
+      usuarios.delete(uid);
+      return ok();
+    }
+    case C.CLEAR_ATTLOG:
+      fichadas.length = 0;
+      console.log('[reloj] memoria de fichadas vaciada');
+      return ok();
+    case C.EXIT:
+      cortar();
+      return ok();
+    default:
+      return ok();
+  }
+}
+
+const descripcion = VIEJO ? `equipo viejo (UDP, fichadas de ${REGISTRO} bytes)` : 'equipo nuevo (TCP)';
+
+if (VIEJO) {
+  // Los equipos viejos hablan solo UDP: un datagrama por comando, sin el prefijo de TCP
+  const sock = dgram.createSocket('udp4');
+  sock.on('message', (msg, rinfo) => {
+    if (msg.length < 8) return;
+    const r = responder(msg, () => {});
+    if (r) sock.send(r, rinfo.port, rinfo.address);
+  });
+  sock.bind(PUERTO, () => console.log(`[reloj] simulador 4370 escuchando en ${PUERTO}: ${descripcion}`));
+} else {
+  net
+    .createServer((sock) => {
+      let pendiente = Buffer.alloc(0);
+      sock.on('error', () => {});
+      sock.on('data', (chunk) => {
+        pendiente = Buffer.concat([pendiente, chunk]);
+        while (pendiente.length >= 8) {
+          const largo = pendiente.readUInt32LE(4);
+          if (pendiente.length < 8 + largo) return;
+          const p = pendiente.subarray(8, 8 + largo);
+          pendiente = pendiente.subarray(8 + largo);
+          let fin = false;
+          const r = responder(p, () => (fin = true));
+          if (r) sock.write(tramaTcp(r));
+          if (fin) sock.end();
         }
-      }
-    });
-  })
-  .listen(PUERTO, () => console.log(`[reloj] simulador 4370 escuchando en ${PUERTO}`));
+      });
+    })
+    .listen(PUERTO, () => console.log(`[reloj] simulador 4370 escuchando en ${PUERTO}: ${descripcion}`));
+}
 
 http
   .createServer((req, res) => {

@@ -1,7 +1,7 @@
 const Comensal = require('../models/Comensal');
 const Fichada = require('../models/Fichada');
 const SERVICIOS = require('../catalogos/servicios');
-const { dedupSegundos } = require('../config');
+const { dedupSegundos, maxRetirosDia } = require('../config');
 const { parseFechaEquipo, partesLocales } = require('../utils/fecha');
 const tiempoReal = require('../tiempoReal');
 
@@ -30,6 +30,11 @@ async function evaluar(pin, fecha, servicioForzado) {
 
   const yaRetiro = await Fichada.exists({ pin, dia, servicio: servicio.codigo, resultado: 'autorizado', ...NO_ANULADA });
   if (yaRetiro) return { ...r, resultado: 'ya_retiro' };
+
+  if (maxRetirosDia > 0) {
+    const retirosHoy = await Fichada.countDocuments({ pin, dia, resultado: 'autorizado', ...NO_ANULADA });
+    if (retirosHoy >= maxRetirosDia) return { ...r, resultado: 'limite_diario' };
+  }
 
   return { ...r, resultado: 'autorizado' };
 }

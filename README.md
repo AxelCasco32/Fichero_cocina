@@ -89,12 +89,33 @@ El firmware 8.0.4.6 del MB360 se conecta por ADMS pero rechaza todos los comando
 y no sube las fichadas. Por eso el sistema se conecta **él** al reloj por el puerto **4370**, el
 mismo que usa el software de ZKTeco.
 
-En `server/.env`:
-```
-RELOJES_4370=128.128.22.250
-INTERVALO_4370=5
-```
-Al arrancar (`npm start`), la consola muestra `[4370 128.128.22.250] conectado ✔`.
+Los equipos se cargan desde la web: **Equipos → Agregar equipo** (solo administradores). Se indica
+el tipo de equipo, la IP y el puerto (casi siempre 4370); con **Probar conexión** se ve el número de
+serie, el firmware y cuántos usuarios y fichadas tiene antes de guardar. Al guardar, el sistema empieza
+a conectarse enseguida y la consola muestra `[4370 <IP>] conectado ✔ por TCP (...)`.
+
+Desde cada equipo también se puede **Editar** (IP, puerto, conexión, formato), **Deshabilitar** (el
+sistema deja de conectarse y de mandarle altas y bajas) o **Quitar** (las fichadas que ya trajo se
+conservan).
+
+`RELOJES_4370` en `server/.env` sigue funcionando: al arrancar registra esas IP si todavía no están
+cargadas. Si quitás un equipo desde la web, sacalo también de ahí o vuelve a aparecer al reiniciar.
+
+### Equipos antiguos (628-C y otros con firmware 6.x)
+
+Elegí el tipo **"628-C u otro equipo antiguo"** al agregarlo. La diferencia con el MB360:
+
+| | MB360 (firmware 8) | Antiguos (firmware 6) |
+|---|---|---|
+| Conexión | TCP | Generalmente solo UDP |
+| Usuarios | 72 bytes, PIN de hasta 24 caracteres, nombre de 24 letras | 28 bytes, **PIN numérico**, nombre de **8 letras** |
+| Fichadas | 40 bytes | 16 u 8 bytes |
+
+Con la conexión en **Automática** el sistema prueba TCP y, si el equipo no responde, UDP. El formato se
+detecta solo comparando el tamaño de los datos con la cantidad de usuarios y fichadas; si alguna vez
+se detecta mal, se puede fijar en **Opciones avanzadas**. Mientras el equipo no informe su número de
+serie, figura como `IP-<ip>`; cuando lo informa, pasa a identificarse con él (y si ese equipo ya estaba
+cargado con otra IP, se unifican).
 
 - Cada 5 segundos se fija si hay fichadas nuevas (y las trae) y ejecuta los comandos pendientes
   (altas, bajas, lectura de usuarios, recuperar, vaciar, reiniciar).
@@ -107,8 +128,10 @@ Al arrancar (`npm start`), la consola muestra `[4370 128.128.22.250] conectado �
   enrolarse de nuevo en el equipo.
 - En el reloj conviene **desactivar "Servidor en la nube / ADMS"** para que no quede intentando.
 
-Para probar sin el equipo: `node src/scripts/simular-reloj-4370.js` (simula un reloj en el puerto
-4370; para fichar: `curl "http://localhost:4371/fichar?pin=1001"`) y `RELOJES_4370=127.0.0.1`.
+Para probar sin el equipo: `node src/scripts/simular-reloj-4370.js` simula un MB360 en el puerto
+4370 (para fichar: `curl "http://localhost:4371/fichar?pin=1001"`). Con `--viejo` simula un equipo
+antiguo por UDP: `node src/scripts/simular-reloj-4370.js 4380 --viejo` (fichar en el puerto 4381;
+`--registro=8` para fichadas de 8 bytes). Después, en la web, agregalo con IP `127.0.0.1` y ese puerto.
 Para probar la conexión con el reloj real sin modificar nada: `npm run prueba-4370 -- <IP>`.
 
 ## Configurar el MB360 (modo ADMS)
@@ -154,6 +177,10 @@ Todas (salvo login) requieren `Authorization: Bearer <token>`.
 | GET | /api/fichadas/resumen?fecha= | Totales por servicio |
 | GET | /api/fichadas/servicios | Catálogo de servicios y horarios |
 | GET | /api/dispositivos | Equipos, en línea o no, comandos pendientes |
+| POST | /api/dispositivos/probar | (admin) `{ip, puerto, protocolo, formato}` → número de serie, firmware, formato detectado |
+| POST | /api/dispositivos | (admin) Agrega un equipo 4370 (`nombre`, `modelo`, `ip`, `puerto`, `protocolo`, `formato`) |
+| PUT | /api/dispositivos/:sn | (admin) Edita nombre, modelo, conexión o `habilitado` |
+| DELETE | /api/dispositivos/:sn | (admin) Quita el equipo (las fichadas se conservan) |
 | GET | /api/dispositivos/:sn/comandos | Historial de comandos |
 | POST | /api/dispositivos/:sn/sincronizar | (admin) Manda todos los activos al reloj |
 | POST | /api/dispositivos/:sn/consultar-usuarios | (admin) Pide la lista de usuarios del reloj |
@@ -170,6 +197,10 @@ Eventos de Socket.io (conectar con `auth: { token }`): `fichada`, `dispositivo`,
   biometría en el reloj. La baja (DELETE) borra a la persona del equipo, y si vuelve hay que
   enrolarla de nuevo.
 - **Horarios de servicio** en `server/src/catalogos/servicios.js`.
+- **Límite diario:** cada persona puede tener como máximo `MAX_RETIROS_DIA` fichadas aceptadas por día
+  (3 por defecto, sumando todos los servicios). Desde la siguiente, la fichada queda como *Límite diario
+  alcanzado* (rojo y pitido en el monitor). Las anuladas no cuentan. `0` = sin límite. El control lo hace
+  el sistema: el MB360 no tiene un contador por día y sigue mostrando "verificado" en pantalla.
 - **Doble toque:** si la misma persona ficha dos veces en menos de `DEDUP_SEGUNDOS`, la segunda
   se ignora.
 - **Biometría:** las plantillas que sube el reloj se guardan como respaldo (colección
