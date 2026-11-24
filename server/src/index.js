@@ -5,7 +5,7 @@ const { conectar } = require('./db');
 const { crearApp } = require('./app');
 const { operadorDesdeToken } = require('./middleware/auth');
 const tiempoReal = require('./tiempoReal');
-const { iniciarConectores } = require('./reloj4370/conector');
+const gestor4370 = require('./reloj4370/gestor');
 
 async function main() {
   await conectar();
@@ -24,13 +24,17 @@ async function main() {
   io.on('connection', (socket) => socket.join('operadores'));
   tiempoReal.setIO(io);
 
-  server.listen(config.port, '0.0.0.0', () => {
+  server.listen(config.port, '0.0.0.0', async () => {
     console.log(`[server] escuchando en el puerto ${config.port}`);
-    if (config.relojes4370.length) {
-      console.log(`[server] modo 4370: conectando a ${config.relojes4370.join(', ')}`);
-      iniciarConectores(config.relojes4370, config.intervalo4370);
-    } else {
-      console.log(`[server] modo ADMS: configurá el reloj apuntando a esta IP y puerto ${config.port}`);
+    try {
+      const n = await gestor4370.iniciar({ relojesEnv: config.relojes4370, intervaloSeg: config.intervalo4370 });
+      if (n) console.log(`[server] conexión directa (4370) con ${n} equipo(s)`);
+      else {
+        console.log('[server] sin equipos por 4370: agregalos desde la web (Equipos → Agregar equipo)');
+        console.log(`[server] los equipos ADMS se registran solos apuntando a esta IP y puerto ${config.port}`);
+      }
+    } catch (err) {
+      console.error('[server] no se pudieron iniciar las conexiones con los relojes:', err);
     }
   });
 }

@@ -1,46 +1,41 @@
-// Conexión directa con el reloj por el puerto 4370 (protocolo "PC" de ZKTeco, el mismo que usa su software).
+// Conexión directa con un reloj por el puerto 4370 (protocolo "PC" de ZKTeco, el mismo que usa su software).
 // El servidor se conecta al reloj y, cada pocos segundos:
 //   1. se fija si hay fichadas nuevas y las trae;
 //   2. ejecuta los comandos pendientes de la cola (altas, bajas, lectura de usuarios, etc.).
 // Así la web funciona igual que con ADMS: usa la misma cola de comandos y los mismos modelos.
+//
+// Sirve para equipos nuevos (MB360, firmware 8, TCP) y antiguos (628-C y similares, firmware 6,
+// generalmente UDP): ver protocolo.js. Cada equipo se configura desde la web (Equipos → Agregar).
 
-const Zkteco = require('zkteco-js');
 const Dispositivo = require('../models/Dispositivo');
 const Comando = require('../models/Comando');
 const Comensal = require('../models/Comensal');
+const Fichada = require('../models/Fichada');
 const UsuarioReloj = require('../models/UsuarioReloj');
 const { registrarFichadas } = require('../services/fichadas');
 const tiempoReal = require('../tiempoReal');
-
-const CMD = {
-  ACK_OK: 2000,
-  RESTART: 1004,
-  REFRESHDATA: 1013,
-  USER_WRQ: 8,
-  DELETE_USER: 18,
-};
-
-// El reloj guarda los nombres en ASCII: sacamos acentos y caracteres raros
-function nombreParaReloj(nombre) {
-  return String(nombre || '')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^\x20-\x7E]/g, '')
-    .trim()
-    .slice(0, 24);
-}
+const zk = require('./protocolo');
 
 const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
+// Identificador provisorio hasta que el reloj informe su número de serie
+const snProvisorio = (ip, puerto = 4370) => `IP-${ip}${Number(puerto) !== 4370 ? `:${puerto}` : ''}`;
+const esProvisorio = (sn) => /^IP-/.test(sn || '');
+
 class Conector {
-  constructor({ ip, puerto = 4370, intervalo = 5, indice = 0 }) {
-    this.ip = ip;
-    this.puerto = puerto;
+  // doc: el Dispositivo; onEquipoReemplazado(id): avisa al gestor que otro registro fue absorbido
+  constructor({ doc, intervalo = 5, onEquipoReemplazado = () => {} }) {
+    this.id = doc._id;
+    this.sn = doc.sn;
+    this.ip = doc.ip;
+    this.puerto = doc.puerto || 4370;
+    this.protocolo = doc.protocolo || 'auto';
+    this.formatoConfig = doc.formato || 'auto';
+    this.formato = doc.formatoDetectado || null; // 'nuevo' | 'viejo' (el que se está usando)
     this.intervaloMs = Math.max(2, intervalo) * 1000;
-    this.puertoLocalUdp = 5000 + indice;
+    this.onEquipoReemplazado = onEquipoReemplazado;
     this.zk = null;
-    this.sn = null;
-    this.usuarios = new Map(); // pin -> { uid, nombre }
+    this.usuarios = new Map(); // pin -> { uid, pin, nombre, privilegio }
     this.ultimoTotalFichadas = null;
     this.fallos = 0;
     this.detenido = false;
@@ -48,7 +43,7 @@ class Conector {
   }
 
   log(...a) {
-    console.log(`[4370 ${this.ip}]`, ...a);
+    console.log(`[4370 ${this.ip}${this.puerto !== 4370 ? `:${this.puerto}` : ''}]`, ...a);
   }
 
   iniciar() {
@@ -56,16 +51,26 @@ class Conector {
     this.bucle();
   }
 
+  async detener() {
+    this.detenido = true;
+    await this.cerrar();
+  }
+
   async bucle() {
     while (!this.detenido) {
       try {
+        if (!this.zk) await this.conectar();
         await this.ciclo();
         this.fallos = 0;
         await esperar(this.intervaloMs);
       } catch (err) {
+        if (this.detenido) break;
         this.fallos++;
         const causa = mensajeError(err);
-        if (this.fallos === 1 || this.fallos % 12 === 0) this.log(`sin conexión: ${causa} (reintentando)`);
+        if (this.fallos === 1 || this.fallos % 12 === 0) {
+          this.log(`sin conexión: ${causa} (reintentando)`);
+          await Dispositivo.updateOne({ _id: this.id }, { $set: { ultimoError: causa, ultimoErrorEn: new Date() } }).catch(() => {});
+        }
         await this.cerrar();
         await esperar(Math.min(30000, this.intervaloMs * this.fallos));
       }
@@ -73,70 +78,92 @@ class Conector {
   }
 
   async cerrar() {
-    const zk = this.zk;
+    const z = this.zk;
     this.zk = null;
-    if (zk) {
-      try {
-        await Promise.race([zk.disconnect(), esperar(3000)]);
-      } catch {
-        /* ya estaba cortada */
-      }
-    }
+    await zk.cerrar(z);
   }
 
   async conectar() {
-    const zk = new Zkteco(this.ip, this.puerto, 10000, this.puertoLocalUdp, 8184);
-    await zk.createSocket();
-    this.zk = zk;
+    this.zk = await zk.abrir({ ip: this.ip, puerto: this.puerto, protocolo: this.protocolo });
+    if (this.detenido) return this.cerrar();
 
-    let sn = null;
-    try {
-      sn = (await zk.getSerialNumber())?.trim();
-    } catch {
-      /* algunos firmwares no lo informan */
-    }
-    this.sn = sn || `IP-${this.ip}`;
+    const [serie, firmware] = [await zk.opcion(this.zk, '~SerialNumber'), await zk.version(this.zk)];
+    await this.asegurarIdentidad(serie);
 
-    let firmware;
-    try {
-      firmware = (await zk.getDeviceVersion())?.trim();
-    } catch {
-      /* opcional */
-    }
+    const via = this.zk.connectionType;
+    if (this.formatoConfig !== 'auto') this.formato = this.formatoConfig;
+    else if (!this.formato) this.formato = zk.formatoPorDefecto({ firmware, protocolo: via });
 
     await Dispositivo.updateOne(
-      { sn: this.sn },
-      { $set: { ip: this.ip, modo: '4370', ...(firmware ? { firmware } : {}) }, $setOnInsert: { sn: this.sn } },
-      { upsert: true }
+      { _id: this.id },
+      {
+        $set: { modo: '4370', protocoloDetectado: via, ...(firmware ? { firmware } : {}) },
+        $unset: { ultimoError: 1, ultimoErrorEn: 1 },
+      }
     );
+
     // La primera vez, traemos los usuarios del reloj a la base (como pendientes) antes de las fichadas
-    const disp = await Dispositivo.findOne({ sn: this.sn }, 'ultimaLecturaUsuarios').lean();
+    const disp = await Dispositivo.findById(this.id, 'ultimaLecturaUsuarios').lean();
     await this.leerUsuarios({ soloCache: !!disp?.ultimaLecturaUsuarios });
-    this.log(`conectado ✔ (SN ${this.sn}, ${this.usuarios.size} usuarios en el reloj)`);
+    this.log(
+      `conectado ✔ por ${via.toUpperCase()} (SN ${this.sn}, formato ${this.formato}, ${this.usuarios.size} usuarios en el reloj)`
+    );
+  }
+
+  // Un equipo agregado a mano se identifica por su IP hasta que informa el número de serie.
+  // Cuando lo informa, se pasa a usar el número de serie (y si ese equipo ya estaba registrado
+  // con otra IP, se unifica en un solo registro).
+  async asegurarIdentidad(serie) {
+    const doc = await Dispositivo.findById(this.id);
+    if (!doc) throw new Error('el equipo fue quitado del sistema');
+    this.sn = doc.sn;
+    if (!serie || serie === doc.sn || !esProvisorio(doc.sn)) return;
+
+    const viejo = doc.sn;
+    const otro = await Dispositivo.findOne({ sn: serie });
+    if (otro) {
+      // El mismo reloj ya estaba registrado (por ejemplo, le cambiaron la IP): conservamos su historial
+      await this.onEquipoReemplazado(otro._id);
+      doc.ultimaFichada = otro.ultimaFichada;
+      doc.ultimaLecturaUsuarios = otro.ultimaLecturaUsuarios;
+      if (!doc.modelo && otro.modelo) doc.modelo = otro.modelo;
+      await Dispositivo.deleteOne({ _id: otro._id });
+      await UsuarioReloj.deleteMany({ deviceSn: viejo }); // se vuelven a leer del reloj
+    } else {
+      await UsuarioReloj.updateMany({ deviceSn: viejo }, { $set: { deviceSn: serie } });
+    }
+    doc.sn = serie;
+    await doc.save();
+    await Comando.updateMany({ deviceSn: viejo }, { $set: { deviceSn: serie } });
+    await Fichada.updateMany({ deviceSn: viejo }, { $set: { deviceSn: serie } }).catch((e) => {
+      if (e.code !== 11000) throw e; // fichadas repetidas: quedan con el identificador viejo
+    });
+    this.sn = serie;
+    this.log(`número de serie ${serie}: el equipo pasa a identificarse así (antes ${viejo})`);
   }
 
   async ciclo() {
-    if (!this.zk) await this.conectar();
-
     const ahora = new Date();
     const cambios = { ultimaConexion: ahora };
 
     // ¿Cambió la cantidad de fichadas? (consulta liviana)
     let total = null;
     try {
-      const info = await this.zk.getInfo();
-      total = info.logCounts;
-      cambios.usuariosEnEquipo = info.userCounts;
-      cambios['info.UserCount'] = info.userCounts;
-      cambios['info.TransactionCount'] = info.logCounts;
-    } catch {
+      const c = await zk.cantidades(this.zk);
+      total = c.fichadas;
+      this.cantidadUsuarios = c.usuarios;
+      cambios.usuariosEnEquipo = c.usuarios;
+      cambios['info.UserCount'] = c.usuarios;
+      cambios['info.TransactionCount'] = c.fichadas;
+    } catch (err) {
+      if (esErrorDeConexion(err)) throw err;
       total = null; // si el firmware no lo informa, sincronizamos igual (más lento)
     }
-    await Dispositivo.updateOne({ sn: this.sn }, { $set: cambios });
+    await Dispositivo.updateOne({ _id: this.id }, { $set: cambios });
     tiempoReal.emitir('dispositivo', { sn: this.sn, ultimaConexion: ahora });
 
     if (total === null || total !== this.ultimoTotalFichadas) {
-      await this.sincronizarFichadas();
+      await this.sincronizarFichadas({ cantidad: total });
       this.ultimoTotalFichadas = total;
     }
 
@@ -144,11 +171,10 @@ class Conector {
   }
 
   // Trae las fichadas del reloj y guarda las nuevas
-  async sincronizarFichadas({ desde, hasta, forzar = false } = {}) {
-    const disp = await Dispositivo.findOne({ sn: this.sn }, 'ultimaFichada').lean();
-    const registros = ((await this.zk.getAttendances()).data || [])
-      .map((r) => ({ pin: String(r.user_id || '').trim(), fecha: new Date(r.record_time), estado: r.state, verificacion: r.type }))
-      .filter((r) => r.pin && !Number.isNaN(r.fecha.getTime()));
+  async sincronizarFichadas({ desde, hasta, forzar = false, cantidad } = {}) {
+    const disp = await Dispositivo.findById(this.id, 'ultimaFichada').lean();
+    const pinPorUid = new Map([...this.usuarios.values()].map((u) => [u.uid, u.pin]));
+    const registros = await zk.leerFichadas(this.zk, { formato: this.formato, cantidad, pinPorUid });
 
     // Solo las posteriores a la última procesada (con 5 min de margen); el resto ya está
     let nuevas = registros;
@@ -170,6 +196,7 @@ class Conector {
         );
       }
     }
+
     if (!nuevas.length) return 0;
 
     const masDeMil = nuevas.length > 1000;
@@ -182,21 +209,26 @@ class Conector {
 
     const maxFecha = registros.reduce((m, r) => (r.fecha > m ? r.fecha : m), new Date(0));
     if (!disp?.ultimaFichada || maxFecha > disp.ultimaFichada) {
-      await Dispositivo.updateOne({ sn: this.sn }, { $set: { ultimaFichada: maxFecha } });
+      await Dispositivo.updateOne({ _id: this.id }, { $set: { ultimaFichada: maxFecha } });
     }
+
     if (guardadas || masDeMil) this.log(`${guardadas} fichadas nuevas`);
     return guardadas;
   }
 
   // Lee los usuarios del reloj. Con soloCache=false también actualiza la "foto" en la base
   async leerUsuarios({ soloCache = false } = {}) {
-    const lista = ((await this.zk.getUsers()).data || []).map((u) => ({
-      uid: u.uid,
-      pin: String(u.userId || '').trim(),
-      nombre: String(u.name || '').trim(),
-      tarjeta: u.cardno ? String(u.cardno) : undefined,
-      privilegio: u.role,
-    }));
+    let cantidad = this.cantidadUsuarios;
+    if (cantidad == null) cantidad = await zk.cantidades(this.zk).then((c) => c.usuarios).catch(() => undefined);
+    const r = await zk.leerUsuarios(this.zk, {
+      formato: this.formatoConfig !== 'auto' ? this.formatoConfig : undefined,
+      cantidad,
+      preferido: this.formato,
+    });
+    if (this.formatoConfig === 'auto' && r.formato && r.formato !== this.formato) this.formato = r.formato;
+    await Dispositivo.updateOne({ _id: this.id }, { $set: { formatoDetectado: this.formato } });
+
+    const lista = r.usuarios;
     this.usuarios = new Map(lista.filter((u) => u.pin).map((u) => [u.pin, u]));
     if (soloCache) return lista;
 
@@ -208,7 +240,7 @@ class Conector {
           deviceSn: this.sn,
           pin: u.pin,
           nombre: u.nombre,
-          tarjeta: u.tarjeta,
+          tarjeta: u.tarjeta ? String(u.tarjeta) : undefined,
           privilegio: u.privilegio,
           tieneBiometria: null, // el protocolo 4370 no lo informa en la lista
           vistoEn: ahora,
@@ -234,15 +266,8 @@ class Conector {
       });
       this.log(`${nuevos.length} usuarios del reloj agregados como "pendientes de revisión"`);
     }
-    await Dispositivo.updateOne({ sn: this.sn }, { $set: { ultimaLecturaUsuarios: ahora } });
+    await Dispositivo.updateOne({ _id: this.id }, { $set: { ultimaLecturaUsuarios: ahora } });
     return lista;
-  }
-
-  async ejecutar(codigo, datos = Buffer.alloc(0)) {
-    const r = await this.zk.executeCmd(codigo, datos);
-    const respuesta = r && r.length >= 2 ? r.readUInt16LE(0) : null;
-    if (respuesta !== CMD.ACK_OK) throw Object.assign(new Error(`el reloj respondió ${respuesta}`), { retorno: -(respuesta || 1) });
-    return r;
   }
 
   async altaUsuario(c) {
@@ -254,21 +279,11 @@ class Conector {
       while (usados.has(uid)) uid++;
       if (uid > 65535) throw new Error('El reloj no tiene lugar para más usuarios');
     }
-    const nombre = nombreParaReloj(c.nombre);
-    const tarjeta = Number(c.tarjeta) || 0;
+    const nombre = zk.nombreParaReloj(c.nombre, this.formato === 'viejo' ? 8 : 24);
+    const privilegio = existente?.privilegio || 0; // 0 = usuario común
 
-    // Registro de 72 bytes del usuario (mismo formato que el software de ZKTeco)
-    const b = Buffer.alloc(72);
-    b.writeUInt16LE(uid, 0);
-    b.writeUInt8(existente?.privilegio || 0, 2); // 0 = usuario común
-    b.write(nombre, 11, 24, 'latin1');
-    b.writeUInt32LE(tarjeta > 0xffffffff ? 0 : tarjeta, 35);
-    b.write('1', 40, 7, 'latin1'); // grupo
-    b.write(c.pin, 48, 24, 'latin1');
-
-    await this.ejecutar(CMD.USER_WRQ, b);
-    await this.ejecutar(CMD.REFRESHDATA).catch(() => {});
-    this.usuarios.set(c.pin, { uid, pin: c.pin, nombre, privilegio: existente?.privilegio || 0 });
+    await zk.escribirUsuario(this.zk, this.formato, { uid, pin: c.pin, nombre, tarjeta: c.tarjeta, privilegio });
+    this.usuarios.set(c.pin, { uid, pin: c.pin, nombre, privilegio });
     await UsuarioReloj.updateOne(
       { deviceSn: this.sn, pin: c.pin },
       { $set: { nombre, vistoEn: new Date() } },
@@ -279,10 +294,7 @@ class Conector {
   async bajaUsuario(pin) {
     const u = this.usuarios.get(pin);
     if (u) {
-      const b = Buffer.alloc(2);
-      b.writeUInt16LE(u.uid, 0);
-      await this.ejecutar(CMD.DELETE_USER, b);
-      await this.ejecutar(CMD.REFRESHDATA).catch(() => {});
+      await zk.borrarUsuario(this.zk, u.uid);
       this.usuarios.delete(pin);
     }
     await UsuarioReloj.deleteOne({ deviceSn: this.sn, pin });
@@ -291,6 +303,7 @@ class Conector {
   async procesarComandos() {
     const pendientes = await Comando.find({ deviceSn: this.sn, estado: 'pendiente' }).sort({ cmdId: 1 }).limit(50);
     for (const cmd of pendientes) {
+      if (this.detenido) return;
       cmd.estado = 'enviado';
       cmd.enviadoEn = new Date();
       cmd.intentos = (cmd.intentos || 0) + 1;
@@ -339,11 +352,11 @@ class Conector {
       case 'vaciar':
         // Antes de vaciar, nos aseguramos de tener todo
         await this.sincronizarFichadas({ forzar: true });
-        await this.zk.clearAttendanceLog();
+        await zk.vaciarFichadas(this.zk);
         this.ultimoTotalFichadas = 0;
         return;
       case 'reiniciar':
-        await this.ejecutar(CMD.RESTART).catch(() => {});
+        await zk.reiniciar(this.zk).catch(() => {});
         await this.cerrar(); // el reloj corta la conexión; se reconecta solo
         return;
       case 'info':
@@ -364,17 +377,7 @@ function mensajeError(err) {
 
 function esErrorDeConexion(err) {
   const m = mensajeError(err);
-  return /ECONN|ETIMEDOUT|EPIPE|socket|TIMEOUT|closed|isn't connected/i.test(m);
+  return /ECONN|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|EPIPE|socket|TIMEOUT|closed|isn't connected/i.test(m);
 }
 
-// Arranca un conector por cada reloj configurado en RELOJES_4370
-function iniciarConectores(lista, intervalo) {
-  return lista.map((entrada, indice) => {
-    const [ip, puerto] = entrada.split(':');
-    const c = new Conector({ ip, puerto: Number(puerto) || 4370, intervalo, indice });
-    c.iniciar();
-    return c;
-  });
-}
-
-module.exports = { Conector, iniciarConectores, nombreParaReloj };
+module.exports = { Conector, snProvisorio, esProvisorio, mensajeError };

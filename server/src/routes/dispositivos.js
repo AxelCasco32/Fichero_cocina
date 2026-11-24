@@ -10,6 +10,8 @@ const { onlineSegundos } = require('../config');
 const { enviarAlta, enviarBaja, accionEquipo, ACCIONES_EQUIPO } = require('../adms/comandos');
 const { requireRol } = require('../middleware/auth');
 const a = require('../utils/async');
+const gestor4370 = require('../reloj4370/gestor');
+const { nombreParaReloj } = require('../reloj4370/protocolo');
 
 const router = express.Router();
 
@@ -45,14 +47,111 @@ router.get(
   })
 );
 
+// --- Alta, edición y baja de equipos (conexión directa por 4370) ---
+
+const PROTOCOLOS = ['auto', 'tcp', 'udp'];
+const FORMATOS = ['auto', 'nuevo', 'viejo'];
+
+// Valida los datos de conexión; devuelve { error } o los datos limpios
+function datosConexion(body, actual = {}) {
+  const ip = String(body.ip ?? actual.ip ?? '').trim();
+  const puerto = Number(body.puerto ?? actual.puerto ?? 4370);
+  const protocolo = body.protocolo ?? actual.protocolo ?? 'auto';
+  const formato = body.formato ?? actual.formato ?? 'auto';
+  if (!/^[a-zA-Z0-9.-]{1,253}$/.test(ip)) return { error: 'Indicá una IP válida (por ejemplo 192.168.1.50)' };
+  if (!Number.isInteger(puerto) || puerto < 1 || puerto > 65535) return { error: 'El puerto tiene que ser un número entre 1 y 65535' };
+  if (!PROTOCOLOS.includes(protocolo)) return { error: 'Conexión inválida' };
+  if (!FORMATOS.includes(formato)) return { error: 'Formato inválido' };
+  return { ip, puerto, protocolo, formato };
+}
+
+const enUso = (ip, puerto, excepto) =>
+  Dispositivo.exists({
+    ip,
+    puerto: puerto === 4370 ? { $in: [4370, null] } : puerto,
+    ...(excepto ? { _id: { $ne: excepto } } : {}),
+  });
+
+// Prueba la conexión sin guardar nada: devuelve número de serie, firmware, formato, etc.
+router.post(
+  '/probar',
+  requireRol('admin'),
+  a(async (req, res) => {
+    const d = datosConexion(req.body || {});
+    if (d.error) return res.status(400).json({ error: d.error });
+    try {
+      res.json(await gestor4370.probar(d));
+    } catch (err) {
+      res.status(err.status || 500).json({ error: err.message });
+    }
+  })
+);
+
+// Agregar un equipo: el sistema empieza a conectarse enseguida
+router.post(
+  '/',
+  requireRol('admin'),
+  a(async (req, res) => {
+    const d = datosConexion(req.body || {});
+    if (d.error) return res.status(400).json({ error: d.error });
+    if (await enUso(d.ip, d.puerto)) return res.status(409).json({ error: 'Ya hay un equipo cargado con esa IP y puerto' });
+
+    const equipo = await Dispositivo.create({
+      ...d,
+      sn: gestor4370.snProvisorio(d.ip, d.puerto),
+      nombre: String(req.body.nombre || '').trim() || `Reloj ${d.ip}`,
+      modelo: String(req.body.modelo || '').trim() || undefined,
+      modo: '4370',
+      habilitado: req.body.habilitado !== false,
+    });
+    await Auditoria.registrar(req, 'agregar_equipo', 'dispositivo', equipo.sn, { ...d, modelo: equipo.modelo });
+    await gestor4370.recargar(equipo._id);
+    res.status(201).json(equipo);
+  })
+);
+
+// Editar nombre, modelo y (en equipos 4370) los datos de conexión o habilitarlo/deshabilitarlo
 router.put(
   '/:sn',
   requireRol('admin'),
   a(buscarEquipo),
   a(async (req, res) => {
-    req.equipo.nombre = String(req.body.nombre || '').trim() || 'MB360';
-    await req.equipo.save();
-    res.json(req.equipo);
+    const eq = req.equipo;
+    if (req.body.nombre !== undefined) eq.nombre = String(req.body.nombre || '').trim() || eq.nombre;
+    if (req.body.modelo !== undefined) eq.modelo = String(req.body.modelo || '').trim() || undefined;
+
+    if (eq.modo === '4370') {
+      const d = datosConexion(req.body, eq);
+      if (d.error) return res.status(400).json({ error: d.error });
+      if ((d.ip !== eq.ip || d.puerto !== (eq.puerto || 4370)) && (await enUso(d.ip, d.puerto, eq._id))) {
+        return res.status(409).json({ error: 'Ya hay otro equipo cargado con esa IP y puerto' });
+      }
+      if (d.formato !== eq.formato) eq.formatoDetectado = undefined; // que se vuelva a detectar
+      Object.assign(eq, d);
+      if (typeof req.body.habilitado === 'boolean') eq.habilitado = req.body.habilitado;
+    }
+    await eq.save();
+    await Auditoria.registrar(req, 'editar_equipo', 'dispositivo', eq.sn, req.body);
+    if (eq.modo === '4370') await gestor4370.recargar(eq._id);
+    res.json(eq);
+  })
+);
+
+// Quitar un equipo del sistema. Las fichadas que ya trajo se conservan.
+router.delete(
+  '/:sn',
+  requireRol('admin'),
+  a(buscarEquipo),
+  a(async (req, res) => {
+    const eq = req.equipo;
+    await gestor4370.detener(eq._id);
+    await Promise.all([
+      Comando.updateMany({ deviceSn: eq.sn, estado: { $in: ['pendiente', 'enviado'] } }, { $set: { estado: 'error', retorno: -9999 } }),
+      UsuarioReloj.deleteMany({ deviceSn: eq.sn }),
+    ]);
+    await Dispositivo.deleteOne({ _id: eq._id });
+    await Auditoria.registrar(req, 'quitar_equipo', 'dispositivo', eq.sn, { ip: eq.ip, nombre: eq.nombre });
+    res.json({ ok: true });
   })
 );
 
@@ -92,6 +191,11 @@ router.get(
     const porPin = new Map(comensales.map((c) => [c.pin, c]));
     const pinsReloj = new Set(enReloj.map((u) => u.pin));
     const respaldo = new Set(conRespaldo);
+    // Cómo debería figurar el nombre en el reloj (los equipos viejos guardan solo 8 letras)
+    const nombreEsperado = (n) =>
+      req.equipo.modo === '4370'
+        ? nombreParaReloj(n, req.equipo.formatoDetectado === 'viejo' ? 8 : 24)
+        : n.slice(0, 24).trim();
 
     const sincronizados = [];
     const soloReloj = [];
@@ -106,7 +210,7 @@ router.get(
           sector: c.sector,
           autorizado: c.autorizado,
           pendienteRevision: c.pendienteRevision,
-          nombreDistinto: (u.nombre || '') !== c.nombre.slice(0, 24).trim(),
+          nombreDistinto: (u.nombre || '') !== nombreEsperado(c.nombre),
         });
       } else {
         // En el reloj pero dado de baja (o inexistente) en la base
