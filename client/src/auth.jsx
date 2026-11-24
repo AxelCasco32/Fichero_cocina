@@ -32,9 +32,9 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('sesion-vencida', logout);
   }, [logout]);
 
-  async function login(usuario, password) {
+  async function login(usuario, password, { recordar = true } = {}) {
     const { token, operador: op } = await api('/auth/login', { method: 'POST', body: { usuario, password } });
-    setToken(token);
+    setToken(token, { recordar });
     conectarSocket(token);
     setOperador(op);
   }

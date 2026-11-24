@@ -1,5 +1,5 @@
 {
-  "name": "cocina-zkteco-server",
+  "name": "biocook-server",
   "version": "0.1.0",
   "description": "Backend del sistema de comedor del hospital: ABM de comensales y monitoreo del ZKTeco MB360 vía ADMS/Push",
   "main": "src/index.js",

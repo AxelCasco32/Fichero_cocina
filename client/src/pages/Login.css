@@ -1,0 +1,159 @@
+/* Pantalla de ingreso de BioCook (diseño moderno). Todo va dentro de .bc-login para no afectar al resto.
+   Sin fuentes externas: en la red del hospital puede no haber internet. */
+.bc-login { font-family: 'Manrope', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif; color: #17221c; background: #f7f8f4; }
+.bc-login *, .bc-login *::before, .bc-login *::after { box-sizing: border-box; }
+.bc-login h1, .bc-login h2, .bc-login p { margin: 0; }
+.bc-login button, .bc-login input { font-family: inherit; }
+.bc-login a { color: inherit; text-decoration: none; }
+
+.bc-login.app-shell { min-height: 100svh; display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(440px, .88fr); overflow: hidden; }
+.bc-login .brand-panel { position: relative; display: flex; min-height: 100svh; flex-direction: column; overflow: hidden; padding: 36px clamp(32px, 4vw, 64px) 28px; color: white; background: #10271f; }
+.bc-login .brand-panel::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 80% 15%, rgba(72, 188, 122, .22), transparent 28%), radial-gradient(circle at 10% 85%, rgba(104, 226, 154, .1), transparent 28%), linear-gradient(135deg, transparent 45%, rgba(255,255,255,.025) 45%); }
+.bc-login .brand-header, .bc-login .brand-footer, .bc-login .brand-content { position: relative; z-index: 2; }
+.bc-login .brand-header { display: flex; align-items: center; justify-content: space-between; animation: bc-fade-down .7s ease both; }
+.bc-login .brand { display: inline-flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 800; letter-spacing: -.7px; }
+.bc-login .system-status { display: flex; align-items: center; gap: 9px; padding: 9px 13px; border: 1px solid rgba(255,255,255,.1); border-radius: 999px; color: #b8c9c0; background: rgba(255,255,255,.04); font-size: 12px; font-weight: 600; }
+.bc-login .system-status i { width: 7px; height: 7px; border-radius: 50%; background: #65e194; box-shadow: 0 0 0 5px rgba(101,225,148,.1); animation: bc-pulse 2s infinite; }
+.bc-login .brand-content { display: flex; flex: 1; flex-direction: column; justify-content: center; max-width: 720px; margin: 4vh auto 0; width: 100%; }
+.bc-login .eyebrow { display: flex; align-items: center; gap: 10px; color: #8ee6ad; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; animation: bc-rise .7s .1s ease both; }
+.bc-login .eyebrow span { width: 22px; height: 1px; background: #6ce29a; }
+.bc-login .brand-content h1 { margin: 20px 0 18px; color: #fff; font-size: clamp(42px, 4.2vw, 67px); font-weight: 600; line-height: 1.06; letter-spacing: -3.4px; animation: bc-rise .7s .2s ease both; }
+.bc-login .brand-content h1 em { color: #8cf0ae; font-style: normal; }
+.bc-login .brand-content > p { max-width: 510px; color: #9db0a7; font-size: 16px; line-height: 1.7; animation: bc-rise .7s .3s ease both; }
+.bc-login .visual-wrap { height: min(38vh, 330px); min-height: 240px; margin-top: 12px; animation: bc-rise .9s .35s ease both; }
+.bc-login .biometric-visual { position: relative; width: 100%; height: 100%; }
+.bc-login .scan-card { position: absolute; top: 50%; left: 48%; width: 220px; height: 270px; border: 1px solid rgba(135,240,174,.24); border-radius: 38px; transform: translate(-50%, -50%) rotate(-3deg); background: linear-gradient(145deg, rgba(55,126,88,.3), rgba(14,42,31,.6)); box-shadow: 0 30px 60px rgba(3,14,9,.35), inset 0 0 40px rgba(123,255,170,.04); backdrop-filter: blur(8px); }
+.bc-login .scan-corners::before, .bc-login .scan-corners::after { content: ''; position: absolute; width: 28px; height: 28px; border-color: #8cf0ae; }
+.bc-login .scan-corners::before { top: 19px; left: 19px; border-top: 2px solid; border-left: 2px solid; border-radius: 9px 0 0; }
+.bc-login .scan-corners::after { right: 19px; bottom: 19px; border-right: 2px solid; border-bottom: 2px solid; border-radius: 0 0 9px; }
+.bc-login .fingerprint { position: absolute; inset: 28px 30px 38px; width: 160px; height: 196px; stroke: #7ee5a2; stroke-width: 2.1; stroke-linecap: round; opacity: .65; filter: drop-shadow(0 0 5px rgba(116,242,161,.18)); }
+.bc-login .scan-line { position: absolute; z-index: 3; left: 25px; right: 25px; height: 2px; top: 55px; background: linear-gradient(90deg, transparent, #a5ffc0, transparent); box-shadow: 0 0 12px #8af1ab; animation: bc-scan 3.2s ease-in-out infinite; }
+.bc-login .verified-pill { position: absolute; z-index: 4; left: 50%; bottom: -16px; display: flex; align-items: center; gap: 7px; width: max-content; padding: 9px 13px; border: 1px solid rgba(156,255,187,.24); border-radius: 999px; color: #caffe0; transform: translateX(-50%); background: #1e5038; box-shadow: 0 10px 24px rgba(0,0,0,.25); font-size: 11px; font-weight: 700; }
+.bc-login .verified-pill span { width: 6px; height: 6px; border-radius: 50%; background: #91f2ad; }
+.bc-login .orbital { position: absolute; top: 50%; left: 48%; border: 1px solid rgba(123,237,164,.1); border-radius: 50%; transform: translate(-50%, -50%); }
+.bc-login .orbital-one { width: 380px; height: 210px; animation: bc-orbit 14s linear infinite; }
+.bc-login .orbital-two { width: 480px; height: 280px; animation: bc-orbit 20s linear reverse infinite; }
+.bc-login .metric-card { position: absolute; display: flex; align-items: center; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(24,62,44,.75); box-shadow: 0 16px 30px rgba(0,0,0,.18); backdrop-filter: blur(12px); animation: bc-float 4s ease-in-out infinite; }
+.bc-login .metric-top { top: 18%; right: 5%; gap: 10px; padding: 10px 14px; }
+.bc-login .metric-icon { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 9px; color: #9ff3bc; background: rgba(128,235,166,.1); }
+.bc-login .metric-icon .icon { width: 16px; }
+.bc-login .metric-card strong { display: block; font-size: 12px; }
+.bc-login .metric-card small { display: block; margin-top: 2px; color: #94a99d; font-size: 10px; }
+.bc-login .metric-bottom { bottom: 14%; left: 5%; flex-direction: column; align-items: flex-start; padding: 10px 13px; animation-delay: -1.5s; }
+.bc-login .mini-avatars { display: flex; margin-bottom: 7px; }
+.bc-login .mini-avatars span { display: grid; width: 26px; height: 26px; margin-left: -5px; place-items: center; border: 2px solid #214a36; border-radius: 50%; color: #d7f4df; background: #47765d; font-size: 7px; font-weight: 700; }
+.bc-login .mini-avatars span:first-child { margin-left: 0; background: #a8735c; }
+.bc-login .mini-avatars span:last-child { background: #356b4c; }
+.bc-login .brand-footer { display: flex; gap: 28px; color: #729080; font-size: 11px; font-weight: 600; letter-spacing: .35px; }
+.bc-login .brand-footer span { display: flex; align-items: center; gap: 8px; }
+.bc-login .brand-footer span::before { content: ''; width: 3px; height: 3px; border-radius: 50%; background: #68da91; }
+
+.bc-login .login-panel { position: relative; display: flex; min-height: 100svh; flex-direction: column; justify-content: center; padding: 50px clamp(38px, 6vw, 100px) 28px; background: #f7f8f4; }
+.bc-login .mobile-brand { display: none; }
+.bc-login .login-card { width: 100%; max-width: 430px; margin: auto; animation: bc-card-in .8s cubic-bezier(.16,1,.3,1) both; }
+.bc-login .login-heading { margin-bottom: 38px; }
+.bc-login .login-heading h2 { margin: 0 0 10px; color: #15231b; font-size: 30px; line-height: 1.2; letter-spacing: -1.4px; font-weight: 750; }
+.bc-login .login-heading p { margin: 0; color: #7a857f; font-size: 14px; line-height: 1.6; }
+.bc-login .field-label { display: block; margin: 0 0 9px; color: #34433b; font-size: 13px; font-weight: 700; }
+.bc-login .input-wrap { position: relative; margin-bottom: 21px; }
+.bc-login .input-wrap > .icon { position: absolute; z-index: 1; top: 50%; left: 16px; width: 17px; color: #94a099; transform: translateY(-50%); transition: color .2s; }
+.bc-login .input-wrap input { width: 100%; height: 52px; padding: 0 48px 0 46px; border: 1px solid #dce2dd; outline: none; border-radius: 13px; color: #233129; background: rgba(255,255,255,.78); font-size: 15px; transition: border-color .2s, box-shadow .2s, background .2s; }
+.bc-login .input-wrap input::placeholder { color: #a6aea9; }
+.bc-login .input-wrap:focus-within > .icon { color: #317d51; }
+.bc-login .input-wrap input:focus { border-color: #5baf78; background: #fff; box-shadow: 0 0 0 4px rgba(71,164,103,.09); }
+.bc-login .password-row { display: flex; align-items: center; justify-content: space-between; }
+.bc-login .password-row .link-olvido { margin-bottom: 9px; color: #347652; font-size: 12px; font-weight: 700; }
+.bc-login .password-row .link-olvido:hover { color: #214d35; }
+.bc-login .eye-button { position: absolute; z-index: 2; top: 50%; right: 13px; display: grid; width: 30px; height: 30px; cursor: pointer; place-items: center; border: 0; color: #85918b; transform: translateY(-50%); background: transparent; }
+.bc-login .eye-button .icon { width: 17px; }
+.bc-login .remember { display: flex; width: max-content; align-items: center; gap: 9px; margin: 2px 0 25px; color: #647068; cursor: pointer; font-size: 12.5px; font-weight: 600; }
+.bc-login .remember input { position: absolute; opacity: 0; }
+.bc-login .checkmark { display: grid; width: 16px; height: 16px; place-items: center; border: 1px solid #cbd3ce; border-radius: 5px; background: white; transition: .2s; }
+.bc-login .remember input:checked + .checkmark { border-color: #2f724b; background: #2f724b; }
+.bc-login .remember input:checked + .checkmark::after { content: ''; width: 7px; height: 4px; border-bottom: 1.5px solid white; border-left: 1.5px solid white; transform: translateY(-1px) rotate(-45deg); }
+.bc-login .submit-button { display: flex; width: 100%; height: 53px; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 13px; color: white; cursor: pointer; background: #1d583a; box-shadow: 0 12px 24px rgba(29,88,58,.19); font-size: 14px; font-weight: 700; transition: transform .2s, background .2s, box-shadow .2s; }
+.bc-login .submit-button:hover { transform: translateY(-2px); background: #164b30; box-shadow: 0 16px 28px rgba(29,88,58,.25); }
+.bc-login .submit-button:active { transform: translateY(0); }
+.bc-login .submit-button:disabled { cursor: wait; opacity: .85; }
+.bc-login .submit-button .icon { width: 17px; transition: transform .2s; }
+.bc-login .submit-button:hover .icon { transform: translateX(3px); }
+.bc-login .spinner { width: 15px; height: 15px; border: 2px solid rgba(255,255,255,.35); border-top-color: white; border-radius: 50%; animation: bc-spin .7s linear infinite; }
+.bc-login .security-note { display: flex; align-items: center; gap: 12px; margin-top: 34px; padding-top: 24px; border-top: 1px solid #e3e7e4; }
+.bc-login .security-note > span { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 10px; color: #57906d; background: #e9f3ec; }
+.bc-login .security-note .icon { width: 17px; }
+.bc-login .security-note p { margin: 0; color: #8a948e; font-size: 11.5px; line-height: 1.55; }
+.bc-login .security-note strong { color: #506058; font-size: 12.5px; }
+.bc-login .login-footer { display: flex; align-items: center; justify-content: space-between; color: #9aa39d; font-size: 11px; }
+.bc-login .login-footer div { display: flex; gap: 20px; }
+.bc-login .login-footer a:hover { color: #347652; }
+.bc-login .brand.dark { color: #1b3828; }
+
+@keyframes bc-fade-down { from { opacity: 0; transform: translateY(-15px); } }
+@keyframes bc-rise { from { opacity: 0; transform: translateY(24px); } }
+@keyframes bc-card-in { from { opacity: 0; transform: translateY(20px) scale(.985); } }
+@keyframes bc-pulse { 50% { box-shadow: 0 0 0 8px rgba(101,225,148,0); } }
+@keyframes bc-scan { 0%, 100% { transform: translateY(0); opacity: .25; } 50% { transform: translateY(150px); opacity: 1; } }
+@keyframes bc-float { 50% { transform: translateY(-8px); } }
+@keyframes bc-orbit { to { transform: translate(-50%, -50%) rotate(360deg); } }
+@keyframes bc-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 1080px) {
+  .bc-login.app-shell { grid-template-columns: 1fr; }
+  .bc-login .brand-panel { display: none; }
+  .bc-login .login-panel { min-height: 100svh; padding: 28px clamp(24px, 8vw, 72px) 22px; background: radial-gradient(circle at 95% 0, #e4f4e9, transparent 32%), radial-gradient(circle at 0 100%, rgba(216,239,224,.55), transparent 32%), #f7f8f4; }
+  .bc-login .mobile-brand { display: block; margin-bottom: clamp(38px, 7vh, 70px); animation: bc-fade-down .7s ease both; }
+  .bc-login .login-card { margin: auto; }
+  .bc-login .login-footer { margin-top: clamp(42px, 7vh, 70px); }
+}
+
+@media (max-width: 520px) {
+  .bc-login .login-panel { justify-content: flex-start; padding: 22px 20px 18px; }
+  .bc-login .mobile-brand { margin-bottom: 44px; }
+  .bc-login .brand { font-size: 20px; }
+  .bc-login .login-heading { margin-bottom: 30px; }
+  .bc-login .login-heading h2 { font-size: 27px; }
+  .bc-login .login-heading p { max-width: 320px; }
+  .bc-login .input-wrap input { height: 50px; }
+  .bc-login .login-footer { margin-top: auto; padding-top: 48px; }
+}
+
+@media (max-width: 370px) {
+  .bc-login .login-panel { padding-inline: 16px; }
+  .bc-login .password-row { align-items: flex-start; }
+  .bc-login .password-row .link-olvido { max-width: 112px; text-align: right; line-height: 1.35; }
+  .bc-login .login-footer div { gap: 12px; }
+}
+
+@media (min-width: 1081px) and (max-height: 760px) {
+  .bc-login .brand-panel { padding-top: 25px; padding-bottom: 20px; }
+  .bc-login .brand-content { margin-top: 1vh; }
+  .bc-login .brand-content h1 { margin-block: 12px; font-size: clamp(36px, 3.6vw, 52px); }
+  .bc-login .brand-content > p { font-size: 13px; }
+  .bc-login .visual-wrap { height: 245px; min-height: 210px; }
+  .bc-login .scan-card { width: 180px; height: 220px; }
+  .bc-login .fingerprint { inset: 24px 23px 30px; width: 134px; height: 165px; }
+  .bc-login .scan-line { left: 22px; right: 22px; }
+  .bc-login .metric-top { right: 2%; }
+  .bc-login .login-heading { margin-bottom: 27px; }
+  .bc-login .input-wrap { margin-bottom: 16px; }
+  .bc-login .security-note { margin-top: 24px; padding-top: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bc-login *, .bc-login *::before, .bc-login *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* Agregados para BioCook */
+.bc-login .bc-logo { display: block; flex-shrink: 0; border-radius: 12px; box-shadow: 0 6px 16px rgba(0,0,0,.18); }
+.bc-login .welcome-logo { display: inline-block; margin-bottom: 24px; }
+.bc-login .welcome-logo .bc-logo { border-radius: 14px; box-shadow: 0 10px 22px rgba(15,110,92,.22); }
+.bc-login .link-olvido { padding: 0; border: 0; background: none; cursor: pointer; }
+.bc-login .ayuda-olvido { margin: -2px 0 10px; color: #5f6d68; font-size: 12.5px; line-height: 1.5; }
+.bc-login .system-status.caido { color: #ffc9c4; }
+.bc-login .system-status.caido i { background: #ff6b5e; box-shadow: 0 0 0 5px rgba(255,107,94,.12); }
+.bc-login .error-login, .bc-login .aviso-login { margin-bottom: 18px; padding: 11px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; animation: bc-rise .35s ease both; }
+.bc-login .error-login { color: #a32a24; background: #fde8e6; border: 1px solid #f6c9c4; }
+.bc-login .aviso-login { color: #7a4a00; background: #fff3dc; border: 1px solid #f3dcae; }
+@media (max-width: 1080px) {
+  .bc-login .welcome-logo { display: none; } /* en pantallas chicas el logo ya está arriba */
+}

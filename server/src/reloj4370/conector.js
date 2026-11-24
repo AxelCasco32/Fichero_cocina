@@ -406,8 +406,11 @@ class Conector {
 
     let final = r.estado;
     if (tiene === true) final = 'ok';
-    else if (r.estado === 'ok' && tiene === false) final = 'no_guardada';
-    this.log(`enrolamiento de ${c.pin} (${zk.DEDOS[dedo]}): ${final}${tiene === null ? ' (sin verificar)' : ''}`);
+    else if (['ok', 'sin_confirmar'].includes(r.estado) && tiene === false) final = 'no_guardada';
+    this.log(
+      `enrolamiento de ${c.pin} (${zk.DEDOS[dedo]}): ${final}${tiene === null ? ' (sin verificar)' : ''}` +
+        ` · códigos del reloj: ${(r.codigos || []).join(',') || 'ninguno'}`
+    );
 
     if (final === 'ok') {
       await Comensal.updateOne({ pin: c.pin }, { $set: { tieneBiometria: true } });
@@ -420,7 +423,7 @@ class Conector {
       return;
     }
     avisar({ estado: final, mensaje: r.mensaje });
-    const codigos = { duplicada: -5, cancelado: -4, tiempo: -6, no_guardada: -7 };
+    const codigos = { duplicada: -5, cancelado: -4, tiempo: -6, no_guardada: -7, sin_confirmar: -9 };
     throw Object.assign(new Error(`enrolamiento: ${final}${r.mensaje ? ` (${r.mensaje})` : ''}`), {
       retorno: codigos[final] ?? -1,
     });

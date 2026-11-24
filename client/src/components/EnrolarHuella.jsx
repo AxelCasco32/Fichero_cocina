@@ -36,6 +36,12 @@ const FINALES = {
     texto: 'Las lecturas terminaron pero la huella no quedó en el equipo. Probá de nuevo apoyando el dedo bien centrado.',
     tono: 'err',
   },
+  sin_confirmar: {
+    icono: '?',
+    titulo: 'El reloj terminó pero no confirmó',
+    texto: 'Probá fichar con ese dedo: si el reloj reconoce a la persona, la huella quedó registrada. Si no, reintentá.',
+    tono: 'warn',
+  },
   error: { icono: '!', titulo: 'No se pudo enrolar', tono: 'err' },
 };
 

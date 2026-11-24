@@ -1,8 +1,8 @@
 {
-  "name": "cocina-zkteco",
+  "name": "biocook",
   "private": true,
   "version": "0.1.0",
-  "description": "Sistema de comedor del hospital: servidor (server/) y web (client/). Los comandos se pueden correr desde esta carpeta.",
+  "description": "BioCook: sistema de comedor del hospital: servidor (server/) y web (client/). Los comandos se pueden correr desde esta carpeta.",
   "scripts": {
     "instalar": "npm --prefix server install && npm --prefix client install",
     "dev": "npm --prefix server run dev",

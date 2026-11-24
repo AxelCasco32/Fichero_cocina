@@ -389,11 +389,14 @@ function escucharEventos(zk, alRecibir) {
 // onEvento({ estado: 'esperando' | 'leyendo' | 'lectura' | 'reintentar' | 'procesando', lectura })
 async function enrolarHuella(zk, { formato, pin, dedo, onEvento = () => {}, debeCancelar = () => false, timeoutMs = 60000 }) {
   const eventos = [];
+  const codigos = []; // todo lo que mandó el reloj (para diagnóstico)
   let avisar = null;
   const dejar = escucharEventos(zk, (cmd, datos) => {
     if (cmd !== CMD.REG_EVENT) return;
     ack(zk);
-    eventos.push(datos.length >= 2 ? datos.readUInt16LE(0) : 0);
+    const codigo = datos.length >= 2 ? datos.readUInt16LE(0) : 0;
+    codigos.push(codigo);
+    eventos.push(codigo);
     if (avisar) avisar();
   });
   // Espera el próximo evento (o la cancelación, o que se acabe el tiempo)
@@ -441,28 +444,33 @@ async function enrolarHuella(zk, { formato, pin, dedo, onEvento = () => {}, debe
 
     const hasta = Date.now() + timeoutMs;
     let lecturas = 0;
+    // Los firmwares no avisan todos igual. Si después de varias señales el reloj se queda callado
+    // 10 s, damos el enrolamiento por terminado y se verifica directamente si guardó la huella.
+    const limite = () => (codigos.length >= 3 ? Math.min(hasta, ultimoEvento + 10000) : hasta);
+    let ultimoEvento = Date.now();
+    const fin = (estado) => ({ estado, codigos });
     for (;;) {
-      const res = await siguiente(hasta);
+      const res = await siguiente(limite());
       if (res === 'cancelar') {
         enviarCrudo(zk, (zk.connectionType === 'udp' ? createUDPHeader : createTCPHeader)(CMD.CANCELCAPTURE, transporte(zk).sessionId || 0, 1, Buffer.alloc(0)));
-        return { estado: 'cancelado' };
+        return fin('cancelado');
       }
-      if (res === null) return { estado: 'tiempo' };
-      if (res === 4) return { estado: 'cancelado' };
-      if (res === 6) return { estado: 'tiempo' };
+      if (res === null) return fin(Date.now() < hasta ? 'sin_confirmar' : codigos.length ? 'sin_confirmar' : 'tiempo');
+      ultimoEvento = Date.now();
+      if (res === 4) return fin('cancelado');
+      if (res === 6) return fin('tiempo');
       if (lecturas < 3) {
         if (res === 100) {
           lecturas++;
           onEvento(lecturas < 3 ? { estado: 'lectura', lectura: lecturas } : { estado: 'procesando', lectura: 3 });
-        } else if (res === 0) {
-          onEvento({ estado: 'reintentar', lectura: lecturas + 1 });
         } else {
+          // El significado de los demás códigos varía según el firmware: mostramos "leyendo"
           onEvento({ estado: 'leyendo', lectura: lecturas + 1 });
         }
         continue;
       }
-      if (res === 5) return { estado: 'duplicada' };
-      return { estado: 'ok' };
+      if (res === 5) return fin('duplicada');
+      return fin('ok');
     }
   } finally {
     dejar();
@@ -484,7 +492,8 @@ async function tieneHuella(zk, { uid, dedo }) {
     const codigo = r?.length >= 2 ? r.readUInt16LE(0) : null;
     if (codigo === CMD.DATA || codigo === CMD.PREPARE_DATA) return true;
     if (codigo === CMD.ACK_OK) return r.length > 16;
-    return false;
+    if (codigo === 2001) return false; // ACK_ERROR: no la tiene
+    return null; // el firmware no entiende la consulta: no se puede saber
   } catch {
     return null;
   }

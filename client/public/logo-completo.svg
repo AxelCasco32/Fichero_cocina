@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 80" role="img" aria-label="BioCook – Comedor del hospital">
+  <title>BioCook</title>
+  <g transform="translate(8 8)">
+    <rect width="64" height="64" rx="15" fill="#0f6e5c"/>
+    <g transform="translate(0 -1.5)">
+      <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-width="3.2">
+        <path d="M13 43 A19 19 0 0 1 51 43"/>
+        <path d="M19 43 A13 13 0 0 1 42.5 35.4"/>
+        <path d="M44.6 39.2 A13 13 0 0 1 45 43"/>
+        <path d="M25 43 A7 7 0 0 1 39 43"/>
+        <path d="M31 43 A1.6 1.6 0 0 1 33 41.6"/>
+        <path d="M9 48.5 H55" stroke-width="3.6"/>
+      </g>
+      <circle cx="32" cy="19.5" r="3.3" fill="#f2b84b"/>
+    </g>
+  </g>
+  <text x="88" y="44" font-family="'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif" font-size="34" font-weight="700" fill="#1c2522">Bio<tspan fill="#0f6e5c">Cook</tspan></text>
+  <text x="89" y="64" font-family="'Segoe UI', system-ui, -apple-system, Roboto, Arial, sans-serif" font-size="13" fill="#5f6d68">Comedor del hospital</text>
+</svg>
