@@ -52,13 +52,22 @@ router.get(
 const PROTOCOLOS = ['auto', 'tcp', 'udp'];
 const FORMATOS = ['auto', 'nuevo', 'viejo'];
 
+// IPv4 (cuatro números de 0 a 255) o un nombre de equipo de la red (sin puntos seguidos)
+function ipValida(ip) {
+  if (/^[\d.]+$/.test(ip)) {
+    const partes = ip.split('.');
+    return partes.length === 4 && partes.every((n) => /^\d{1,3}$/.test(n) && Number(n) <= 255);
+  }
+  return /^(?=.{1,253}$)[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*$/.test(ip);
+}
+
 // Valida los datos de conexión; devuelve { error } o los datos limpios
 function datosConexion(body, actual = {}) {
   const ip = String(body.ip ?? actual.ip ?? '').trim();
   const puerto = Number(body.puerto ?? actual.puerto ?? 4370);
   const protocolo = body.protocolo ?? actual.protocolo ?? 'auto';
   const formato = body.formato ?? actual.formato ?? 'auto';
-  if (!/^[a-zA-Z0-9.-]{1,253}$/.test(ip)) return { error: 'Indicá una IP válida (por ejemplo 192.168.1.50)' };
+  if (!ipValida(ip)) return { error: `"${ip}" no es una IP válida (por ejemplo 192.168.1.50)` };
   if (!Number.isInteger(puerto) || puerto < 1 || puerto > 65535) return { error: 'El puerto tiene que ser un número entre 1 y 65535' };
   if (!PROTOCOLOS.includes(protocolo)) return { error: 'Conexión inválida' };
   if (!FORMATOS.includes(formato)) return { error: 'Formato inválido' };
