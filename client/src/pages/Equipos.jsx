@@ -15,6 +15,18 @@ const TIPOS = [
   { id: 'viejo', texto: '628-C u otro equipo antiguo', modelo: '628-C', protocolo: 'auto', formato: 'auto' },
   { id: 'otro', texto: 'Otro / no sé (detectar automáticamente)', modelo: '', protocolo: 'auto', formato: 'auto' },
 ];
+// "6 h 30 min", "45 s"
+function duracion(seg) {
+  const s = Math.abs(Math.round(seg));
+  if (s < 60) return `${s} s`;
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return [d && `${d} d`, h && `${h} h`, m && `${m} min`].filter(Boolean).join(' ') || '1 min';
+}
+const corrido = (eq) => eq.modo === '4370' && eq.desfaseHora != null && Math.abs(eq.desfaseHora) > 60;
+const textoDesfase = (seg) => `${seg < 0 ? 'atrasado' : 'adelantado'} ${duracion(seg)}`;
+
 const TEXTO_FORMATO = { nuevo: 'Nuevo (firmware 8)', viejo: 'Antiguo (firmware 6)' };
 const TEXTO_PROTOCOLO = { auto: 'Automática (TCP y si no, UDP)', tcp: 'TCP', udp: 'UDP' };
 
@@ -30,6 +42,7 @@ function FormEquipo({ inicial, onCerrar, onGuardado }) {
     protocolo: inicial?.protocolo || 'auto',
     formato: inicial?.formato || 'auto',
     habilitado: inicial?.habilitado !== false,
+    horaAutomatica: !!inicial?.horaAutomatica,
   }));
   const [tipo, setTipo] = useState(inicial?.formato === 'viejo' ? 'viejo' : inicial ? 'otro' : 'nuevo');
   const [prueba, setPrueba] = useState(null);
@@ -66,7 +79,11 @@ function FormEquipo({ inicial, onCerrar, onGuardado }) {
     e.preventDefault();
     setError('');
     setOcupado('guardando');
-    const datos = { nombre: f.nombre.trim(), modelo: f.modelo.trim(), ...(directo ? { ...conexion(), habilitado: f.habilitado } : {}) };
+    const datos = {
+      nombre: f.nombre.trim(),
+      modelo: f.modelo.trim(),
+      ...(directo ? { ...conexion(), habilitado: f.habilitado, horaAutomatica: f.horaAutomatica } : {}),
+    };
     try {
       const r = editando
         ? await api(`/dispositivos/${encodeURIComponent(inicial.sn)}`, { method: 'PUT', body: datos })
@@ -147,6 +164,11 @@ function FormEquipo({ inicial, onCerrar, onGuardado }) {
                 </label>
               </div>
             </details>
+
+            <label className="check" style={{ marginTop: '0.75rem' }}>
+              <input type="checkbox" checked={f.horaAutomatica} onChange={set('horaAutomatica')} />
+              Poner en hora automáticamente (si el reloj se corre más de 1 minuto)
+            </label>
 
             {editando && (
               <label className="check" style={{ marginTop: '0.75rem' }}>
@@ -482,6 +504,20 @@ function Equipo({ eq, esAdmin, onAviso, onError, recargarLista, version, onEdita
         </div>
       )}
 
+      {!deshabilitado && corrido(eq) && (
+        <div className="aviso fila entre" style={{ marginTop: '0.75rem' }}>
+          <span>
+            ⏰ El reloj está <strong>{textoDesfase(eq.desfaseHora)}</strong>. Las fichadas se registran con su hora, así que
+            el servicio y el "ya retiró" se calculan mal.
+          </span>
+          {esAdmin && (
+            <button className="chico primario" onClick={() => accion('poner-hora', 'Poniendo el reloj en hora…')}>
+              Poner en hora
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="datos-equipo">
         <div>
           <small>N.º de serie</small>
@@ -524,6 +560,19 @@ function Equipo({ eq, esAdmin, onAviso, onError, recargarLista, version, onEdita
           <small>Última conexión</small>
           {fechaHora(eq.ultimaConexion)}
         </div>
+        {eq.modo === '4370' && (
+          <div>
+            <small>Hora del reloj</small>
+            {eq.desfaseHora == null ? (
+              '—'
+            ) : corrido(eq) ? (
+              <span className="tag warn">{textoDesfase(eq.desfaseHora)}</span>
+            ) : (
+              <span className="tag ok">En hora</span>
+            )}
+            {eq.horaAutomatica && <small style={{ display: 'block' }}>se corrige sola</small>}
+          </div>
+        )}
       </div>
 
       <div className="grupo-acciones">
@@ -531,6 +580,11 @@ function Equipo({ eq, esAdmin, onAviso, onError, recargarLista, version, onEdita
         <button className="chico" onClick={() => accion('actualizar', 'Se pidió al reloj que envíe lo pendiente')}>
           Pedir datos nuevos
         </button>
+        {eq.modo === '4370' && esAdmin && (
+          <button className="chico" onClick={() => accion('poner-hora', 'Poniendo el reloj en hora…')}>
+            Poner en hora
+          </button>
+        )}
         {eq.comandosPendientes > 0 && (
           <button
             className="chico"

@@ -101,6 +101,18 @@ conservan).
 `RELOJES_4370` en `server/.env` sigue funcionando: al arrancar registra esas IP si todavía no están
 cargadas. Si quitás un equipo desde la web, sacalo también de ahí o vuelve a aparecer al reiniciar.
 
+### Hora de los relojes
+
+Las fichadas se registran con la hora **del reloj**: si está corrida, el servicio y el "ya retiró" se
+calculan mal. El sistema compara la hora de cada reloj con la del servidor una vez por minuto:
+
+- En **Equipos** se ve "Hora del reloj: En hora" o, si se corrió más de 1 minuto, un aviso con cuánto
+  está atrasado o adelantado y el botón **Poner en hora** (le pasa la hora del servidor al reloj).
+- En **Editar** se puede tildar **Poner en hora automáticamente**: si se corre más de 1 minuto, el
+  sistema la corrige solo (como mucho una vez por hora).
+- La hora del servidor sale de `TZ_NAME` del `.env`: conviene que la PC del servidor esté en hora.
+- Simulador con la hora corrida: `node src/scripts/simular-reloj-4370.js --desfase=-23400` (6 h 30 min atrasado).
+
 ### Enrolar huellas desde la web
 
 En **Comensales**, el botón **Huella** de cada persona (y automáticamente después de dar de alta a

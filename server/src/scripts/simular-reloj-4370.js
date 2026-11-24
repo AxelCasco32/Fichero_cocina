@@ -25,8 +25,20 @@ const C = {
   CONNECT: 1000, EXIT: 1001, ACK_OK: 2000, OPTIONS_RRQ: 11, GET_VERSION: 1100, FREE_SIZES: 50,
   DATA_WRRQ: 1503, DATA: 1501, FREE_DATA: 1502, USER_WRQ: 8, DELETE_USER: 18, REFRESHDATA: 1013,
   CLEAR_ATTLOG: 15, RESTART: 1004, STARTENROLL: 61, CANCELCAPTURE: 62, GET_USERTEMP: 88, REG_EVENT: 500,
-  ACK_ERROR: 2001,
+  ACK_ERROR: 2001, GET_TIME: 201, SET_TIME: 202,
 };
+
+// Hora del reloj simulado: --desfase=-23400 lo atrasa 6 h 30 min (en segundos)
+let desfaseMs = Number((args.find((x) => x.startsWith('--desfase=')) || '=0').split('=')[1]) * 1000 || 0;
+const horaReloj = () => new Date(Date.now() + desfaseMs);
+function decodificarFecha(n) {
+  const s = n % 60; n = Math.floor(n / 60);
+  const mi = n % 60; n = Math.floor(n / 60);
+  const h = n % 24; n = Math.floor(n / 24);
+  const d = (n % 31) + 1; n = Math.floor(n / 31);
+  const m = n % 12;
+  return new Date(Math.floor(n / 12) + 2000, m, d, h, mi, s);
+}
 
 // Enrolamiento simulado: huellas guardadas ("uid:dedo") y cómo termina el próximo enrolamiento
 // (se cambia con  curl "http://localhost:4371/enrolar?resultado=duplicada"  — ok | duplicada | tiempo)
@@ -206,6 +218,17 @@ function responder(p, cortar, enviar) {
       const clave = `${datos.readInt16LE(0)}:${datos.readInt8(2)}`;
       return huellas.has(clave) ? paquete(C.DATA, 1, reply, Buffer.from('PLANTILLA-SIMULADA')) : paquete(C.ACK_ERROR, 1, reply);
     }
+    case C.GET_TIME: {
+      const d = Buffer.alloc(4);
+      d.writeUInt32LE(codificarFecha(horaReloj()), 0);
+      return ok(d);
+    }
+    case C.SET_TIME: {
+      const nueva = decodificarFecha(datos.readUInt32LE(0));
+      desfaseMs = Math.round((nueva.getTime() - Date.now()) / 1000) * 1000;
+      console.log(`[reloj] hora puesta: ${nueva.toLocaleString('es-AR')}`);
+      return ok();
+    }
     case C.CLEAR_ATTLOG:
       fichadas.length = 0;
       console.log('[reloj] memoria de fichadas vaciada');
@@ -258,7 +281,7 @@ http
     if (url.pathname === '/fichar') {
       const pin = url.searchParams.get('pin');
       const hora = url.searchParams.get('hora'); // HH:MM opcional
-      const fecha = new Date();
+      const fecha = horaReloj(); // el reloj marca con SU hora (aunque esté corrida)
       if (hora) fecha.setHours(Number(hora.slice(0, 2)), Number(hora.slice(3, 5)), 0, 0);
       fecha.setMilliseconds(0);
       fichadas.push({ pin, fecha });

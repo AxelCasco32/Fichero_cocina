@@ -83,6 +83,7 @@ const ACCIONES_EQUIPO = {
   },
   actualizar: { texto: () => 'CHECK', tipo: 'actualizar' }, // fuerza a subir datos nuevos
   info: { texto: () => 'INFO', tipo: 'info' },
+  'poner-hora': { texto: () => 'SET TIME', tipo: 'hora' }, // pone el reloj con la hora del servidor (4370)
   reiniciar: { texto: () => 'REBOOT', tipo: 'reiniciar' },
   'vaciar-fichadas': { texto: () => 'CLEAR LOG', tipo: 'vaciar' }, // borra las fichadas guardadas EN el reloj
 };
