@@ -11,13 +11,13 @@ const zk = require('./protocolo');
 const conectores = new Map(); // id del Dispositivo -> Conector
 let intervalo = 5;
 
-const clave = (ip, puerto) => `${ip}:${Number(puerto) || 4370}`;
+const clave = (ip, puerto) => `${String(ip || '').trim().toLowerCase()}:${Number(puerto) || 4370}`;
 
 function arrancar(doc) {
   const ocupado = [...conectores.values()].find((c) => clave(c.ip, c.puerto) === clave(doc.ip, doc.puerto));
   if (ocupado) {
     console.log(
-      `[4370] "${doc.nombre}" (${doc.sn}) usa la misma IP que ${ocupado.sn}: no se conecta dos veces. ` +
+      `[4370] "${doc.nombre || doc.sn}" (${doc.sn}) usa la misma IP que ${ocupado.sn}: no se conecta dos veces. ` +
         'Quitá el equipo repetido desde la web.'
     );
     return;
@@ -74,8 +74,20 @@ async function iniciar({ relojesEnv = [], intervaloSeg = 5 } = {}) {
   // Si hay dos registros con la misma IP, se conecta el que tiene un número de serie válido
   // (el otro suele ser una lectura corrupta del número de serie) y se avisa en la consola
   const puntaje = (d) => (zk.serieValida(d.sn) ? 0 : /^IP-/.test(d.sn) ? 1 : 2);
-  lista.sort((x, y) => puntaje(x) - puntaje(y)).forEach(arrancar);
-  return lista.length;
+  lista.sort((x, y) => puntaje(x) - puntaje(y));
+
+  // Los registros con número de serie corrupto que repiten la IP de un equipo válido quedan
+  // deshabilitados (no se borran: pueden tener fichadas). Se pueden quitar desde la web.
+  const validos = new Set(lista.filter((d) => puntaje(d) === 0).map((d) => clave(d.ip, d.puerto)));
+  const activos = [];
+  for (const d of lista) {
+    if (puntaje(d) === 2 && validos.has(clave(d.ip, d.puerto))) {
+      await Dispositivo.updateOne({ _id: d._id }, { $set: { habilitado: false } });
+      console.log(`[4370] ${d.sn} es una lectura corrupta del número de serie de otro equipo: queda deshabilitado`);
+    } else activos.push(d);
+  }
+  activos.forEach(arrancar);
+  return conectores.size;
 }
 
 function conectadoA(ip, puerto) {
