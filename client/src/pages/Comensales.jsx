@@ -3,6 +3,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { fechaHora } from '../util.js';
 import EnrolarHuella from '../components/EnrolarHuella.jsx';
+import SectorEditable from '../components/SectorEditable.jsx';
+import Icono from '../components/Icono.jsx';
+import { exportarComensales } from '../exportarComensales.js';
 
 const ESTADOS = [
   { id: 'activos', texto: 'Activos' },
@@ -146,6 +149,8 @@ export default function Comensales() {
   const [servicios, setServicios] = useState([]);
   const [editando, setEditando] = useState(null);
   const [enrolando, setEnrolando] = useState(null); // { comensal, esNuevo }
+  const [sectores, setSectores] = useState([]);
+  const [exportando, setExportando] = useState(false);
   const [error, setError] = useState('');
   const [mensaje, setMensaje] = useState('');
 
@@ -159,7 +164,27 @@ export default function Comensales() {
 
   useEffect(() => {
     api('/fichadas/servicios').then(setServicios).catch(() => {});
+    api('/comensales/sectores').then(setSectores).catch(() => {});
   }, []);
+
+  async function exportar() {
+    setError('');
+    setExportando(true);
+    try {
+      const n = await exportarComensales({ estado, busqueda, servicios });
+      avisar(`Se exportaron ${n} comensales a Excel`);
+    } catch (e) {
+      setError(`No se pudo exportar: ${e.message}`);
+    }
+    setExportando(false);
+  }
+
+  // Edición rápida del sector: actualiza la fila sin recargar toda la lista
+  function sectorGuardado(c, sector) {
+    setDatos((d) => ({ ...d, items: d.items.map((x) => (x._id === c._id ? { ...x, sector } : x)) }));
+    if (sector && !sectores.includes(sector)) setSectores((l) => [...l, sector].sort((x, y) => x.localeCompare(y, 'es')));
+    avisar(sector ? `${c.nombre}: sector "${sector}"` : `${c.nombre}: sin sector`);
+  }
   useEffect(cargar, [cargar]);
 
   // Busca 300 ms después de que dejan de escribir
@@ -223,9 +248,17 @@ export default function Comensales() {
     <>
       <div className="fila entre">
         <h1>Comensales</h1>
-        <button className="primario" onClick={() => setEditando({})}>
-          + Nuevo comensal
-        </button>
+        <div className="fila">
+          <button onClick={exportar} disabled={exportando} title="Descarga la lista de esta pestaña (con la búsqueda aplicada)">
+            <span className="fila" style={{ gap: '0.4rem' }}>
+              <Icono nombre="descargar" tamano={17} />
+              {exportando ? 'Exportando…' : 'Exportar a Excel'}
+            </span>
+          </button>
+          <button className="primario" onClick={() => setEditando({})}>
+            + Nuevo comensal
+          </button>
+        </div>
       </div>
 
       {error && <div className="error">{error}</div>}
@@ -276,6 +309,12 @@ export default function Comensales() {
           </div>
         </div>
 
+        <datalist id="sectores-lista">
+          {sectores.map((x) => (
+            <option key={x} value={x} />
+          ))}
+        </datalist>
+
         <table>
           <thead>
             <tr>
@@ -296,7 +335,14 @@ export default function Comensales() {
                   <strong>{c.nombre}</strong>
                   {c.dni && <small style={{ display: 'block' }}>DNI {c.dni}</small>}
                 </td>
-                <td>{c.sector || '—'}</td>
+                <td>
+                  <SectorEditable
+                    comensal={c}
+                    listaId="sectores-lista"
+                    onGuardado={(sector) => sectorGuardado(c, sector)}
+                    onError={setError}
+                  />
+                </td>
                 <td>
                   <small>{c.servicios.map((s) => servicios.find((x) => x.codigo === s)?.nombre || s).join(', ')}</small>
                 </td>

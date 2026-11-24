@@ -169,3 +169,17 @@ tr.anulada td.acciones, tr.anulada td .tag { text-decoration: none; }
 .resultado-huella.warn .icono { background: var(--warn); }
 
 /* Logo */
+
+/* Comensales: sector editable */
+.sector-celda { display: inline-flex; align-items: center; gap: 0.35rem; }
+.sector-celda .sin-sector { color: var(--suave); font-style: italic; }
+.sector-lapiz { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--suave); opacity: 0.55; transition: opacity 0.15s, background 0.15s, color 0.15s; }
+tr:hover .sector-lapiz, .sector-lapiz:focus-visible { opacity: 1; }
+.sector-lapiz:hover { color: var(--primario); background: var(--primario-claro); border-color: #bfe0d6; }
+.sector-edicion { display: inline-flex; align-items: center; gap: 0.25rem; }
+.sector-edicion input { width: 160px; padding: 0.3rem 0.5rem; font-size: 0.9rem; }
+.sector-edicion button { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border-radius: 7px; }
+.sector-ok { color: #fff; background: var(--primario); border-color: var(--primario); }
+.sector-ok:hover { background: #0b5849; }
+.sector-cancelar { color: var(--suave); }
+@media (hover: none) { .sector-lapiz { opacity: 1; } }
