@@ -43,6 +43,8 @@ const TRAZOS = {
     </>
   ),
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+  lapiz: <path d="M4 20h4L18.5 9.5a2.12 2.12 0 0 0-3-3L5 17v3zM13.5 7.5l3 3" />,
+  descargar: <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />,
   mas: <path d="M12 5v14M5 12h14" />,
   buscar: (
     <>

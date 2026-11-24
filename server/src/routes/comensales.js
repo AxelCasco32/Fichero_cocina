@@ -17,22 +17,46 @@ const CAMPOS_EDITABLES = ['nombre', 'dni', 'sector', 'tarjeta', 'servicios', 'au
 const elegir = (obj, campos) =>
   Object.fromEntries(campos.filter((c) => obj[c] !== undefined).map((c) => [c, obj[c]]));
 
+// Filtro común del listado y la exportación: ?q=texto&estado=activos|inactivos|pendientes|todos
+function filtroListado(query) {
+  const filtro = {};
+  const estado = query.estado || 'activos';
+  if (estado === 'activos') filtro.activo = true;
+  else if (estado === 'inactivos') filtro.activo = false;
+  else if (estado === 'pendientes') filtro.pendienteRevision = true;
+
+  if (query.q) {
+    const rx = new RegExp(escapeRegex(String(query.q).trim()), 'i');
+    filtro.$or = [{ nombre: rx }, { pin: rx }, { dni: rx }, { sector: rx }];
+  }
+  return filtro;
+}
+
+// Exportación: todos los que cumplen el filtro (sin paginar), para armar el Excel
+router.get(
+  '/exportar',
+  a(async (req, res) => {
+    const items = await Comensal.find(filtroListado(req.query)).sort({ nombre: 1 }).lean();
+    res.json(items);
+  })
+);
+
+// Sectores ya cargados (para sugerirlos al editar)
+router.get(
+  '/sectores',
+  a(async (_req, res) => {
+    const sectores = (await Comensal.distinct('sector')).filter((x) => x && x.trim());
+    res.json(sectores.sort((x, y) => x.localeCompare(y, 'es')));
+  })
+);
+
 // Listado con búsqueda y paginado: ?q=texto&estado=activos|inactivos|pendientes|todos&page=1&limit=50
 router.get(
   '/',
   a(async (req, res) => {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
-    const filtro = {};
-    const estado = req.query.estado || 'activos';
-    if (estado === 'activos') filtro.activo = true;
-    else if (estado === 'inactivos') filtro.activo = false;
-    else if (estado === 'pendientes') filtro.pendienteRevision = true;
-
-    if (req.query.q) {
-      const rx = new RegExp(escapeRegex(req.query.q.trim()), 'i');
-      filtro.$or = [{ nombre: rx }, { pin: rx }, { dni: rx }, { sector: rx }];
-    }
+    const filtro = filtroListado(req.query);
 
     const [items, total] = await Promise.all([
       Comensal.find(filtro).sort({ nombre: 1 }).skip((page - 1) * limit).limit(limit).lean(),
@@ -134,6 +158,21 @@ router.post(
     if (!c || !c.activo) return res.status(404).json({ error: 'No encontrado o inactivo' });
     const comandos = await enviarAlta(c, undefined, { conBiometria: true });
     res.json({ encolados: comandos.length });
+  })
+);
+
+// Cambiar solo el sector (edición rápida desde la tabla). No toca el reloj ni el estado de revisión.
+router.patch(
+  '/:id/sector',
+  a(async (req, res) => {
+    const sector = String(req.body?.sector ?? '').trim().slice(0, 80);
+    const c = await Comensal.findById(req.params.id);
+    if (!c) return res.status(404).json({ error: 'No encontrado' });
+    const anterior = c.sector || '';
+    c.sector = sector || undefined;
+    await c.save();
+    await Auditoria.registrar(req, 'cambiar_sector', 'comensal', c.pin, { antes: anterior, ahora: sector });
+    res.json({ _id: c._id, sector: c.sector || '' });
   })
 );
 
