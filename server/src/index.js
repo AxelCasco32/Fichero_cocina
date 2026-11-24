@@ -7,6 +7,22 @@ const { operadorDesdeToken } = require('./middleware/auth');
 const tiempoReal = require('./tiempoReal');
 const gestor4370 = require('./reloj4370/gestor');
 
+// La librería de los relojes puede dejar errores de red sin atrapar (por ejemplo, si el equipo se
+// apaga a mitad de una descarga). No dejamos que eso tire abajo todo el servidor.
+const esErrorDeRed = (err) =>
+  /ECONN|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|EPIPE|ERR_SOCKET|TIMEOUT_ON|socket/i.test(`${err?.code} ${err?.message}`);
+process.on('unhandledRejection', (err) => {
+  console.error('[server] error no atrapado (se sigue funcionando):', err?.message || err);
+});
+process.on('uncaughtException', (err) => {
+  if (esErrorDeRed(err)) {
+    console.error('[server] error de red con un reloj (se sigue funcionando):', err.message);
+    return;
+  }
+  console.error('[server] error fatal:', err);
+  process.exit(1);
+});
+
 async function main() {
   await conectar();
 

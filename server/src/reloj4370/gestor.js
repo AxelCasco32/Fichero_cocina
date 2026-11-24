@@ -12,6 +12,14 @@ let intervalo = 5;
 const clave = (ip, puerto) => `${ip}:${Number(puerto) || 4370}`;
 
 function arrancar(doc) {
+  const ocupado = [...conectores.values()].find((c) => clave(c.ip, c.puerto) === clave(doc.ip, doc.puerto));
+  if (ocupado) {
+    console.log(
+      `[4370] "${doc.nombre}" (${doc.sn}) usa la misma IP que ${ocupado.sn}: no se conecta dos veces. ` +
+        'Quitá el equipo repetido desde la web.'
+    );
+    return;
+  }
   const c = new Conector({ doc, intervalo, onEquipoReemplazado: detener });
   conectores.set(String(doc._id), c);
   c.iniciar();
