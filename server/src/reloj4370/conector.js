@@ -228,22 +228,32 @@ class Conector {
 
   // Trae las fichadas del reloj y guarda las nuevas
   async sincronizarFichadas({ desde, hasta, forzar = false, cantidad } = {}) {
-    const disp = await Dispositivo.findById(this.id, 'ultimaFichada').lean();
+    const disp = await Dispositivo.findById(this.id, 'ultimaFichada fichadasLeidas').lean();
     const pinPorUid = new Map([...this.usuarios.values()].map((u) => [u.uid, u.pin]));
     const registros = await zk.leerFichadas(this.zk, { formato: this.formato, cantidad, pinPorUid });
 
-    // Solo las posteriores a la última procesada (con 5 min de margen); el resto ya está
+    const { rangoDia, hoy } = require('../utils/fecha');
+    const inicioDeHoy = rangoDia(hoy()).desde;
+    const leidas = disp?.fichadasLeidas;
+    let rutina = false;
+
     let nuevas = registros;
     if (desde || hasta) {
       nuevas = registros.filter((r) => (!desde || r.fecha >= desde) && (!hasta || r.fecha < hasta));
+    } else if (!forzar && typeof leidas === 'number') {
+      // Rutina: lo que se agregó al final de la memoria del reloj desde la última lectura.
+      // Si ahora hay menos registros, la memoria se vació (desde otro programa): se toma lo que haya.
+      rutina = true;
+      nuevas = registros.length >= leidas ? registros.slice(leidas) : registros;
     } else if (!forzar && disp?.ultimaFichada) {
-      const limite = new Date(disp.ultimaFichada.getTime() - 5 * 60 * 1000);
+      // Equipos que todavía no tienen la cuenta de registros: lo de hoy en adelante y lo posterior
+      // a la última fichada, sin confiar en fechas futuras (reloj que estuvo adelantado).
+      const ultima = Math.min(new Date(disp.ultimaFichada).getTime(), Date.now());
+      const limite = new Date(Math.min(ultima - 5 * 60 * 1000, inicioDeHoy.getTime()));
       nuevas = registros.filter((r) => r.fecha > limite);
     } else if (!forzar) {
       // Primera conexión: solo las de hoy. El historial se trae con "Recuperar fichadas",
       // después de revisar y habilitar a los comensales (así se evalúan bien).
-      const { rangoDia, hoy } = require('../utils/fecha');
-      const inicioDeHoy = rangoDia(hoy()).desde;
       nuevas = registros.filter((r) => r.fecha >= inicioDeHoy);
       if (registros.length > nuevas.length) {
         this.log(
@@ -253,7 +263,15 @@ class Conector {
       }
     }
 
-    if (!nuevas.length) return 0;
+    const marcarLeidas = async () => {
+      if (!desde && !hasta && registros.length !== leidas) {
+        await Dispositivo.updateOne({ _id: this.id }, { $set: { fichadasLeidas: registros.length } });
+      }
+    };
+    if (!nuevas.length) {
+      await marcarLeidas();
+      return 0;
+    }
 
     const masDeMil = nuevas.length > 1000;
     if (masDeMil) this.log(`importando ${nuevas.length} fichadas del reloj (puede tardar unos minutos)…`);
@@ -261,15 +279,15 @@ class Conector {
     // En la sincronización de rutina, todo lo nuevo se avisa en vivo al monitor (aunque el reloj tenga
     // la hora corrida). Al importar historial (primera conexión, "Recuperar fichadas") solo se avisan
     // las de los últimos 10 minutos, para no inundar el monitor.
-    const rutina = !desde && !hasta && !forzar && !!disp?.ultimaFichada;
     const emitirDesde = rutina ? null : new Date(Math.max(this.inicio.getTime(), Date.now()) - 10 * 60 * 1000);
     const nombres = new Map([...this.usuarios.values()].map((u) => [u.pin, u.nombre]));
     const guardadas = await registrarFichadas(this.sn, nuevas, { emitirDesde, nombres });
 
-    const maxFecha = registros.reduce((m, r) => (r.fecha > m ? r.fecha : m), new Date(0));
-    if (!disp?.ultimaFichada || maxFecha > disp.ultimaFichada) {
-      await Dispositivo.updateOne({ _id: this.id }, { $set: { ultimaFichada: maxFecha } });
-    }
+    // Fecha de la última fichada (informativa); se ignoran fechas futuras de un reloj adelantado
+    const tope = Date.now() + 10 * 60 * 1000;
+    const maxFecha = registros.reduce((m, r) => (r.fecha > m && r.fecha.getTime() <= tope ? r.fecha : m), new Date(0));
+    if (maxFecha.getTime() > 0) await Dispositivo.updateOne({ _id: this.id }, { $set: { ultimaFichada: maxFecha } });
+    await marcarLeidas();
 
     if (guardadas || masDeMil) this.log(`${guardadas} fichadas nuevas`);
     return guardadas;
@@ -484,6 +502,7 @@ class Conector {
         await this.sincronizarFichadas({ forzar: true });
         await zk.vaciarFichadas(this.zk);
         this.ultimoTotalFichadas = 0;
+        await Dispositivo.updateOne({ _id: this.id }, { $set: { fichadasLeidas: 0 } });
         return;
       case 'reiniciar':
         await zk.reiniciar(this.zk).catch(() => {});

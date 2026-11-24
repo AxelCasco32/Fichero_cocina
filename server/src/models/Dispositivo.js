@@ -15,6 +15,9 @@ const dispositivoSchema = new Schema(
     operlogStamp: { type: String, default: 'None' },
     modo: { type: String, enum: ['adms', '4370'], default: 'adms' }, // cómo se comunica
     ultimaFichada: Date, // fecha de la fichada más reciente traída del reloj (modo 4370)
+    // Cuántos registros de la memoria del reloj ya se procesaron (las fichadas nuevas se agregan al
+    // final). Se usa esto y no la fecha, porque si el reloj tuvo la hora corrida las fechas engañan.
+    fichadasLeidas: Number,
     handshakeEn: Date, // última vez que el equipo pidió la configuración (cdata?options=all)
     ultimaLecturaUsuarios: Date, // última vez que leímos la lista completa de usuarios del reloj
     info: Schema.Types.Mixed, // datos que devuelve el comando INFO (capacidad, cantidades, etc.)
