@@ -109,7 +109,7 @@ async function probar({ ip, puerto = 4370, protocolo = 'auto', formato = 'auto' 
     let usuarios = cant?.usuarios ?? null;
     try {
       const r = await zk.leerUsuarios(z, { formato: formato !== 'auto' ? formato : undefined, cantidad: cant?.usuarios });
-      formatoDetectado = formatoDetectado || r.formato;
+      formatoDetectado = r.formato || formatoDetectado;
       usuarios = r.usuarios.length;
     } catch {
       /* se informa igual lo que se pudo leer */

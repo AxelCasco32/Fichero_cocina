@@ -200,7 +200,9 @@ function decodificarUsuario(b) {
 // `preferido`: si no se puede saber por la cantidad, qué formato probar primero
 async function leerUsuarios(zk, { formato, cantidad, preferido } = {}) {
   const datos = await leerBloque(zk, REQUEST_DATA.GET_USERS);
-  const candidatos = formato === 'nuevo' ? [72] : formato === 'viejo' ? [28] : preferido === 'viejo' ? [28, 72] : [72, 28];
+  // El formato configurado es solo una preferencia: manda lo que realmente coincide con los datos
+  // (hay equipos "antiguos", como algunos 628-C, con firmware que ya usa el formato nuevo)
+  const candidatos = (formato || preferido) === 'viejo' ? [28, 72] : [72, 28];
   const tamanio = tamanioRegistro(datos.length, cantidad, candidatos);
   if (!tamanio) throw new Error(`no se reconoce el formato de usuarios (${datos.length} bytes)`);
 
@@ -217,7 +219,7 @@ async function leerUsuarios(zk, { formato, cantidad, preferido } = {}) {
 // `pinPorUid`: en el registro de 8 bytes el reloj guarda el número interno, no el PIN
 async function leerFichadas(zk, { formato, cantidad, pinPorUid = new Map() } = {}) {
   const datos = await leerBloque(zk, REQUEST_DATA.GET_ATTENDANCE_LOGS);
-  const candidatos = formato === 'nuevo' ? [40] : formato === 'viejo' ? [16, 8] : [40, 16, 8];
+  const candidatos = formato === 'viejo' ? [16, 8, 40] : [40, 16, 8];
   const tamanio = tamanioRegistro(datos.length, cantidad, candidatos);
   if (!tamanio) throw new Error(`no se reconoce el formato de fichadas (${datos.length} bytes)`);
 

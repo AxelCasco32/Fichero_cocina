@@ -229,7 +229,12 @@ class Conector {
       cantidad,
       preferido: this.formato,
     });
-    if (this.formatoConfig === 'auto' && r.formato && r.formato !== this.formato) this.formato = r.formato;
+    if (r.formato && r.formato !== this.formato) {
+      if (this.formatoConfig !== 'auto' && r.formato !== this.formatoConfig) {
+        this.log(`el equipo usa el formato ${r.formato} (estaba configurado ${this.formatoConfig}): se usa el del equipo`);
+      }
+      this.formato = r.formato;
+    }
     await Dispositivo.updateOne({ _id: this.id }, { $set: { formatoDetectado: this.formato } });
 
     const lista = r.usuarios;
