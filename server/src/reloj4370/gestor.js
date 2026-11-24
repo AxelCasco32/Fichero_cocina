@@ -3,6 +3,8 @@
 // registrar equipos al arrancar (si esa IP todavía no está cargada).
 
 const Dispositivo = require('../models/Dispositivo');
+const Comando = require('../models/Comando');
+const Fichada = require('../models/Fichada');
 const { Conector, snProvisorio, mensajeError } = require('./conector');
 const zk = require('./protocolo');
 
@@ -39,21 +41,35 @@ async function recargar(id) {
   if (doc && doc.modo === '4370' && doc.habilitado !== false && doc.ip) arrancar(doc);
 }
 
-// Registra los equipos de RELOJES_4370 que todavía no están en la base
+// Registra los equipos de RELOJES_4370 que todavía no están en la base.
+// Alcanza con que la IP ya figure en cualquier equipo (aunque se haya registrado de otra forma).
 async function importarDesdeEnv(lista) {
   for (const entrada of lista) {
     const [ip, p] = entrada.split(':');
     const puerto = Number(p) || 4370;
-    const filtroPuerto = puerto === 4370 ? { $in: [4370, null] } : puerto;
-    if (await Dispositivo.exists({ ip, modo: '4370', puerto: filtroPuerto })) continue;
+    if (await Dispositivo.exists({ ip })) continue;
     await Dispositivo.create({ sn: snProvisorio(ip, puerto), nombre: `Reloj ${ip}`, ip, puerto, modo: '4370' });
     console.log(`[4370] equipo ${ip}:${puerto} registrado desde RELOJES_4370`);
+  }
+}
+
+// Borra los registros provisorios ("IP-...") que nunca se conectaron y repiten la IP de otro equipo:
+// no tienen fichadas ni datos propios, son duplicados.
+async function limpiarDuplicados() {
+  const provisorios = await Dispositivo.find({ sn: /^IP-/, ultimaConexion: null }).lean();
+  for (const d of provisorios) {
+    if (!(await Dispositivo.exists({ _id: { $ne: d._id }, ip: d.ip }))) continue;
+    if (await Fichada.exists({ deviceSn: d.sn })) continue;
+    await Comando.deleteMany({ deviceSn: d.sn });
+    await Dispositivo.deleteOne({ _id: d._id });
+    console.log(`[4370] se borró el registro repetido ${d.sn} (la IP ${d.ip} ya está cargada)`);
   }
 }
 
 async function iniciar({ relojesEnv = [], intervaloSeg = 5 } = {}) {
   intervalo = intervaloSeg;
   await importarDesdeEnv(relojesEnv);
+  await limpiarDuplicados();
   const lista = await Dispositivo.find({ modo: '4370', habilitado: { $ne: false }, ip: { $nin: [null, ''] } }).lean();
   // Si hay dos registros con la misma IP, se conecta el que tiene un número de serie válido
   // (el otro suele ser una lectura corrupta del número de serie) y se avisa en la consola
