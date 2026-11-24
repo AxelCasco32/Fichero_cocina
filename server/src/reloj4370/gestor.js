@@ -129,4 +129,18 @@ async function probar({ ip, puerto = 4370, protocolo = 'auto', formato = 'auto' 
   }
 }
 
-module.exports = { iniciar, recargar, detener, probar, snProvisorio };
+const porSn = (sn) => [...conectores.values()].find((c) => c.sn === sn) || null;
+
+// Hace que el conector de ese equipo procese la cola ya (sin esperar al próximo ciclo)
+function despertar(sn) {
+  porSn(sn)?.despertar();
+}
+
+// Cancela el enrolamiento en curso en ese equipo. Devuelve true si había uno en curso.
+function cancelarEnrolamiento(sn) {
+  return porSn(sn)?.cancelarEnrolamiento() || false;
+}
+
+const conectado = (sn) => !!porSn(sn)?.zk;
+
+module.exports = { iniciar, recargar, detener, probar, snProvisorio, despertar, cancelarEnrolamiento, conectado };

@@ -101,6 +101,19 @@ conservan).
 `RELOJES_4370` en `server/.env` sigue funcionando: al arrancar registra esas IP si todavía no están
 cargadas. Si quitás un equipo desde la web, sacalo también de ahí o vuelve a aparecer al reiniciar.
 
+### Enrolar huellas desde la web
+
+En **Comensales**, el botón **Huella** de cada persona (y automáticamente después de dar de alta a
+alguien) abre el enrolamiento: se elige el reloj y se toca el dedo en el dibujo de las manos. El reloj
+le pide a la persona que apoye el dedo 3 veces y la web muestra el avance en vivo; al final se verifica
+con el reloj que la huella haya quedado guardada y la persona figura como "Enrolado".
+
+- Solo para relojes con conexión directa (4370) y en línea; un enrolamiento a la vez por reloj.
+- Si la huella ya es de otra persona, el reloj la rechaza y se avisa.
+- El **rostro** no se puede enrolar a distancia: se hace en el equipo.
+- Con el simulador: `curl "http://localhost:4371/enrolar?resultado=duplicada"` (o `tiempo`, `ok`) define
+  cómo termina el próximo enrolamiento.
+
 ### Equipos antiguos (628-C y otros con firmware 6.x)
 
 Elegí el tipo **"628-C u otro equipo antiguo"** al agregarlo. La diferencia con el MB360:

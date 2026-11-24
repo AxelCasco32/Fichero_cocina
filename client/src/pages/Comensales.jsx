@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { fechaHora } from '../util.js';
+import EnrolarHuella from '../components/EnrolarHuella.jsx';
 
 const ESTADOS = [
   { id: 'activos', texto: 'Activos' },
@@ -118,8 +119,8 @@ function Formulario({ inicial, servicios, onCerrar, onGuardado }) {
 
         {!editando && (
           <p className="ayuda" style={{ fontSize: '0.85rem', color: 'var(--suave)' }}>
-            Al guardar, la persona se envía al reloj. Después tiene que pararse frente al equipo para enrolar su rostro o
-            huella.
+            Al guardar, la persona se envía al reloj y enseguida podés registrar su huella desde acá, con la persona frente
+            al equipo. El rostro se enrola en el reloj.
           </p>
         )}
 
@@ -144,6 +145,7 @@ export default function Comensales() {
   const [datos, setDatos] = useState({ items: [], total: 0, limit: 50 });
   const [servicios, setServicios] = useState([]);
   const [editando, setEditando] = useState(null);
+  const [enrolando, setEnrolando] = useState(null); // { comensal, esNuevo }
   const [error, setError] = useState('');
   const [mensaje, setMensaje] = useState('');
 
@@ -316,6 +318,9 @@ export default function Comensales() {
                       <button className="chico" onClick={() => setEditando(c)}>
                         Editar
                       </button>
+                      <button className="chico" onClick={() => setEnrolando({ comensal: c })} title="Registrar la huella desde el reloj">
+                        Huella
+                      </button>
                       {c.autorizado ? (
                         <button className="chico" onClick={() => habilitar(c, false)}>
                           Deshabilitar
@@ -374,7 +379,18 @@ export default function Comensales() {
             setEditando(null);
             avisar(fueEdicion ? `${c.nombre} actualizado` : `${c.nombre} creado y enviado al reloj`);
             cargar();
+            // Alta nueva: seguimos directo con la huella (se puede saltear con "Ahora no")
+            if (!fueEdicion) setEnrolando({ comensal: c, esNuevo: true });
           }}
+        />
+      )}
+
+      {enrolando && (
+        <EnrolarHuella
+          comensal={enrolando.comensal}
+          esNuevo={enrolando.esNuevo}
+          onCerrar={() => setEnrolando(null)}
+          onListo={cargar}
         />
       )}
     </>
