@@ -15,7 +15,7 @@ function Layout({ children }) {
     <div className="layout">
       <aside className="sidebar">
         <div className="marca">
-          <span className="marca-icono" aria-hidden>🍽</span>
+          <img className="marca-logo" src="/logo.svg" alt="" width="38" height="38" />
           <div>
             <strong>BioCook</strong>
             <small>Comedor del hospital</small>

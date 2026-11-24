@@ -32,7 +32,6 @@ small { color: var(--suave); }
 .sidebar { background: #12302a; color: #e8f1ee; display: flex; flex-direction: column; padding: 1rem; gap: 1rem; }
 .sidebar small { color: #a9c2bb; display: block; }
 .marca { display: flex; align-items: center; gap: 0.6rem; padding: 0.25rem 0.25rem 0.75rem; border-bottom: 1px solid #24483f; }
-.marca-icono { font-size: 1.6rem; }
 .sidebar nav { display: flex; flex-direction: column; gap: 0.25rem; }
 .sidebar nav a { color: #d4e4df; text-decoration: none; padding: 0.6rem 0.75rem; border-radius: 8px; }
 .sidebar nav a:hover { background: #1c4239; }
@@ -211,3 +210,7 @@ tr.anulada td.acciones, tr.anulada td .tag { text-decoration: none; }
 .resultado-huella.ok .icono { background: var(--ok); }
 .resultado-huella.err .icono { background: var(--err); }
 .resultado-huella.warn .icono { background: var(--warn); }
+
+/* Logo */
+.marca-logo { display: block; border-radius: 9px; flex-shrink: 0; }
+.login-logo { display: block; margin-bottom: 0.6rem; border-radius: 15px; }

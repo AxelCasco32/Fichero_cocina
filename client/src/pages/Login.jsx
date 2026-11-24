@@ -25,6 +25,7 @@ export default function Login() {
     <div className="login">
       <form onSubmit={enviar}>
         <div>
+          <img className="login-logo" src="/logo.svg" alt="" width="64" height="64" />
           <h1>BioCook</h1>
           <small>Comedor del hospital · ingresá con tu usuario de cocina</small>
         </div>
