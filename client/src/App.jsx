@@ -17,8 +17,8 @@ function Layout({ children }) {
         <div className="marca">
           <span className="marca-icono" aria-hidden>🍽</span>
           <div>
-            <strong>Comedor</strong>
-            <small>Hospital</small>
+            <strong>BioCook</strong>
+            <small>Comedor del hospital</small>
           </div>
         </div>
         <nav>

@@ -1,4 +1,4 @@
-# Sistema de comedor – ZKTeco MB360
+# BioCook – Sistema de comedor (relojes ZKTeco)
 
 Backend (Node + Express + MongoDB + Socket.io) para gestionar el fichero MB360 de la cocina:
 ABM de comensales, validación de retiro por servicio y monitoreo de fichadas en vivo.

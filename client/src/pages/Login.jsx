@@ -25,8 +25,8 @@ export default function Login() {
     <div className="login">
       <form onSubmit={enviar}>
         <div>
-          <h1>Comedor</h1>
-          <small>Ingresá con tu usuario de cocina</small>
+          <h1>BioCook</h1>
+          <small>Comedor del hospital · ingresá con tu usuario de cocina</small>
         </div>
         {error && <div className="error">{error}</div>}
         <label className="campo">
