@@ -87,7 +87,7 @@ class Conector {
     this.zk = await zk.abrir({ ip: this.ip, puerto: this.puerto, protocolo: this.protocolo });
     if (this.detenido) return this.cerrar();
 
-    const [serie, firmware] = [await zk.opcion(this.zk, '~SerialNumber'), await zk.version(this.zk)];
+    const [serie, firmware] = [await zk.numeroDeSerie(this.zk), await zk.version(this.zk)];
     await this.asegurarIdentidad(serie);
 
     const via = this.zk.connectionType;
@@ -158,6 +158,10 @@ class Conector {
     } catch (err) {
       if (esErrorDeConexion(err)) throw err;
       total = null; // si el firmware no lo informa, sincronizamos igual (más lento)
+      if (!this.avisoSinCantidades) {
+        this.avisoSinCantidades = true;
+        this.log('este reloj no informa cantidades: se descargan las fichadas en cada ciclo');
+      }
     }
     await Dispositivo.updateOne({ _id: this.id }, { $set: cambios });
     tiempoReal.emitir('dispositivo', { sn: this.sn, ultimaConexion: ahora });

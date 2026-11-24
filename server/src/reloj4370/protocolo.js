@@ -110,6 +110,19 @@ async function opcion(zk, clave) {
   }
 }
 
+// Un número de serie válido son solo letras y números. Algunos firmwares a veces devuelven la
+// respuesta corrupta (por ejemplo "A=WD221860296" en vez de "AEWD221860296"): reintentamos y, si
+// sigue mal, se descarta para no registrar el mismo reloj dos veces.
+const serieValida = (s) => /^[A-Za-z0-9]{5,32}$/.test(s || '');
+
+async function numeroDeSerie(zk, intentos = 3) {
+  for (let i = 0; i < intentos; i++) {
+    const s = await opcion(zk, '~SerialNumber');
+    if (serieValida(s)) return s;
+  }
+  return null;
+}
+
 async function version(zk) {
   try {
     return textoRespuesta(await comando(zk, CMD.GET_VERSION)) || null;
@@ -295,6 +308,8 @@ module.exports = {
   cerrar,
   comando,
   opcion,
+  numeroDeSerie,
+  serieValida,
   version,
   cantidades,
   leerUsuarios,

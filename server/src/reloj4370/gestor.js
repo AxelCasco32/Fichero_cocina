@@ -55,7 +55,10 @@ async function iniciar({ relojesEnv = [], intervaloSeg = 5 } = {}) {
   intervalo = intervaloSeg;
   await importarDesdeEnv(relojesEnv);
   const lista = await Dispositivo.find({ modo: '4370', habilitado: { $ne: false }, ip: { $nin: [null, ''] } }).lean();
-  lista.forEach(arrancar);
+  // Si hay dos registros con la misma IP, se conecta el que tiene un número de serie válido
+  // (el otro suele ser una lectura corrupta del número de serie) y se avisa en la consola
+  const puntaje = (d) => (zk.serieValida(d.sn) ? 0 : /^IP-/.test(d.sn) ? 1 : 2);
+  lista.sort((x, y) => puntaje(x) - puntaje(y)).forEach(arrancar);
   return lista.length;
 }
 
@@ -71,7 +74,7 @@ async function probar({ ip, puerto = 4370, protocolo = 'auto', formato = 'auto' 
   let z;
   try {
     z = await zk.abrir({ ip, puerto, protocolo, timeoutMs: 6000 });
-    const numeroSerie = await zk.opcion(z, '~SerialNumber');
+    const numeroSerie = await zk.numeroDeSerie(z);
     const firmware = await zk.version(z);
     const cant = await zk.cantidades(z).catch(() => null);
     let formatoDetectado = formato !== 'auto' ? formato : null;
