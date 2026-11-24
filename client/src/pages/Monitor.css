@@ -1,0 +1,137 @@
+/* Monitor en vivo de BioCook (rediseño). Todo va dentro de .bc-monitor para no afectar al resto. */
+.bc-monitor { color: #172b2a; font-family: 'DM Sans', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif; }
+.bc-monitor h1, .bc-monitor h2, .bc-monitor p { margin: 0; }
+.bc-monitor button { font: inherit; border: 0; background: none; padding: 0; color: inherit; cursor: pointer; border-radius: 0; }
+.bc-monitor button:hover { background: none; }
+.bc-monitor input, .bc-monitor select { font: inherit; border: 0; padding: 0; background: none; }
+.bc-monitor input:focus, .bc-monitor select:focus { outline: none; }
+.bc-monitor .topbar { max-width:1440px;margin:0 auto 23px;display:flex;align-items:center;gap:15px; }
+.bc-monitor .topbar h1 { color:#183330;font:800 25px/1.1 'Manrope', 'Segoe UI', system-ui, sans-serif;letter-spacing:-.7px; }
+.bc-monitor .eyebrow { display:flex;align-items:center;gap:6px;color:#26836e;font-size:11px;font-weight:800;letter-spacing:1.2px;margin-bottom:6px; }
+.bc-monitor .live-dot { width:6px;height:6px;border-radius:50%;background:#2fc88f;animation:bc-pulse 1.8s infinite; }
+.bc-monitor .top-actions { margin-left:auto;display:flex;align-items:center;gap:10px; }
+.bc-monitor .connection { display:flex;align-items:center;gap:8px;height:38px;padding:0 13px;border:1px solid #dbe5e1;border-radius:10px;background:#f9fbfa;color:#49645f;font-size:13px;font-weight:600; }
+.bc-monitor .sound-button { display:flex;align-items:center;gap:7px;height:38px;padding:0 10px;color:#506863;font-size:13px; }
+.bc-monitor .sound-button i { position:relative;width:28px;height:16px;border-radius:20px;background:#cdd8d5;transition:.2s; }
+.bc-monitor .sound-button i::after { content:'';position:absolute;top:3px;left:3px;width:10px;height:10px;border-radius:50%;background:white;box-shadow:0 1px 3px #72847f;transition:.2s; }
+.bc-monitor .sound-button.on i { background:#2b9479; }.bc-monitor .sound-button.on i::after { transform:translateX(12px); }
+.bc-monitor .primary-button { min-height:40px;display:flex;align-items:center;justify-content:center;gap:7px;padding:0 15px;border-radius:10px;color:white;background:#14745f;font-size:13.5px;font-weight:700;box-shadow:0 7px 18px rgba(20,116,95,.16);transition:.2s; }
+.bc-monitor .primary-button:hover { background:#0d604f;transform:translateY(-1px);box-shadow:0 9px 22px rgba(20,116,95,.22); }
+
+.bc-monitor .arrival-card { position:relative;max-width:1440px;min-height:174px;margin:0 auto 18px;display:flex;align-items:center;gap:25px;overflow:hidden;padding:25px 32px;border:1px solid #f1cfca;border-radius:17px;background:linear-gradient(105deg,#fff 0%,#fff 55%,#fff7f5 100%);box-shadow:0 8px 30px rgba(57,83,76,.06);animation:bc-card-in .55s ease both; }
+.bc-monitor .arrival-accent { position:absolute;inset:0 auto 0 0;width:5px;background:#e34b40; }
+.bc-monitor .scan-visual { position:relative;flex:0 0 88px;height:88px;display:grid;place-items:center; }
+.bc-monitor .scan-icon { position:relative;z-index:2;width:60px;height:60px;display:grid;place-items:center;border-radius:50%;color:white;background:#e44f45;box-shadow:0 9px 24px rgba(228,79,69,.26); }
+.bc-monitor .scan-ring { position:absolute;border:1px solid rgba(228,79,69,.17);border-radius:50%;animation:bc-ripple 2.5s ease-out infinite; }.bc-monitor .ring-1 {width:74px;height:74px}.bc-monitor .ring-2 {width:88px;height:88px;animation-delay:.8s}
+.bc-monitor .arrival-copy { flex:1;min-width:0; }
+.bc-monitor .arrival-label { color:#9d6963;font-size:11px;font-weight:800;letter-spacing:1.2px; }
+.bc-monitor .arrival-copy h2 { margin:6px 0 7px;color:#253b38;font:800 34px 'Manrope', 'Segoe UI', system-ui, sans-serif;letter-spacing:-.7px; }
+.bc-monitor .result-line { display:flex;align-items:center;gap:11px; }.bc-monitor .result-line span { padding:5px 10px;border-radius:7px;color:#b9362e;background:#ffe6e2;font-size:15px;font-weight:800; }.bc-monitor .result-line small { color:#748884;font-size:13px; }
+.bc-monitor .arrival-time { display:flex;flex-direction:column;align-items:flex-end;padding:0 28px;border-right:1px solid #ecdeda; }
+.bc-monitor .arrival-time strong { color:#203936;font:800 44px 'Manrope', 'Segoe UI', system-ui, sans-serif;letter-spacing:-1.5px; }.bc-monitor .arrival-time span { color:#294b45;font-size:15px;font-weight:700; }.bc-monitor .arrival-time small { margin-top:3px;color:#879893;font-size:12px; }
+.bc-monitor .details-button { display:flex;align-items:center;gap:5px;color:#a5433d;font-size:13px;font-weight:700;white-space:nowrap; }
+
+.bc-monitor .service-grid { max-width:1440px;margin:0 auto 18px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px; }
+.bc-monitor .service-card { position:relative;display:grid;grid-template-columns:auto 1fr auto;align-items:start;column-gap:10px;overflow:hidden;min-height:129px;padding:18px;border:1px solid #e0e7e4;border-radius:14px;background:#fff;box-shadow:0 4px 15px rgba(43,72,65,.03);animation:bc-card-in .45s ease both;animation-delay:var(--delay);transition:.2s; }
+.bc-monitor .service-card:hover { transform:translateY(-2px);box-shadow:0 9px 25px rgba(43,72,65,.08); }
+.bc-monitor .service-icon { width:35px;height:35px;display:grid;place-items:center;border-radius:9px; }.bc-monitor .service-icon.mint {color:#178268;background:#e5f7f1}.bc-monitor .service-icon.blue {color:#3976b9;background:#eaf3fc}.bc-monitor .service-icon.violet {color:#745bb6;background:#f1edfb}.bc-monitor .service-icon.orange {color:#b86a33;background:#fbefe5}
+.bc-monitor .service-heading strong { display:block;color:#2a413e;font-size:14.5px; }.bc-monitor .service-heading span { color:#8a9a96;font-size:11.5px; }
+.bc-monitor .service-value { color:#1c3733;font:800 30px 'Manrope', 'Segoe UI', system-ui, sans-serif;line-height:35px; }
+.bc-monitor .service-footer { grid-column:2/4;display:flex;justify-content:space-between;margin-top:10px;color:#8a9b97;font-size:12px; }.bc-monitor .service-footer .has-rejections {color:#d04b42;font-weight:700}
+.bc-monitor .service-progress { position:absolute;inset:auto 18px 12px;height:3px;border-radius:4px;background:#eef2f0;overflow:hidden; }.bc-monitor .service-progress span {display:block;height:100%;border-radius:4px;background:#51bb99}.bc-monitor .service-progress.blue span {background:#67a3df}.bc-monitor .service-progress.violet span {background:#9a87cc}.bc-monitor .service-progress.orange span {background:#dd9d6e}
+
+.bc-monitor .activity-panel { max-width:1440px;margin:0 auto;border:1px solid #dce5e2;border-radius:16px;background:white;box-shadow:0 7px 25px rgba(43,72,65,.045);overflow:hidden;animation:bc-card-in .55s .18s ease both; }
+.bc-monitor .panel-header { min-height:82px;display:flex;align-items:center;gap:20px;padding:17px 20px;border-bottom:1px solid #e6ecea; }
+.bc-monitor .panel-header h2 { color:#203936;font:800 18px 'Manrope', 'Segoe UI', system-ui, sans-serif;letter-spacing:-.3px; }.bc-monitor .panel-header p { margin-top:3px;color:#869692;font-size:12px; }
+.bc-monitor .panel-tools { margin-left:auto;display:flex;gap:8px; }
+.bc-monitor .search-box { width:225px;height:36px;display:flex;align-items:center;gap:8px;padding:0 11px;border:1px solid #dde6e3;border-radius:9px;color:#849692;background:#fafcfb;transition:.2s; }
+.bc-monitor .search-box:focus-within { border-color:#64ad9a;box-shadow:0 0 0 3px rgba(38,143,115,.1);background:white; }
+.bc-monitor .search-box input { width:100%;outline:none;color:#314a46;background:transparent;font-size:13.5px; }.bc-monitor .search-box input::placeholder {color:#9daba8}
+.bc-monitor .date-button { height:36px;display:flex;align-items:center;gap:7px;padding:0 12px;border:1px solid #dde6e3;border-radius:9px;color:#536b66;background:white;font-size:13px;font-weight:600; }
+.bc-monitor .table-wrap { overflow-x:auto; }
+.bc-monitor table { width:100%;border-collapse:collapse;text-align:left; }
+.bc-monitor th { height:37px;padding:0 20px;color:#82928e;background:#f9fbfa;font-size:11px;font-weight:800;letter-spacing:.65px;text-transform:uppercase; }
+.bc-monitor td { height:54px;padding:0 20px;border-top:1px solid #edf1ef;color:#354d49;font-size:13.5px; }
+.bc-monitor tbody tr { animation:bc-row-in .35s ease both;animation-delay:var(--row-delay);transition:.15s; } .bc-monitor tbody tr:hover {background:#fbfdfc}
+.bc-monitor .time-cell { font-variant-numeric:tabular-nums;font-weight:700;color:#344b47; }
+.bc-monitor .person-cell { display:flex;align-items:center;gap:9px;white-space:nowrap; }.bc-monitor .person-cell strong {font-size:13.5px;font-weight:700}
+.bc-monitor .mini-avatar { width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:#e9f2ef;color:#46736a;font-size:10px;font-weight:800; }
+.bc-monitor td.muted { color:#71837f;font-variant-numeric:tabular-nums; }
+.bc-monitor .service-pill { padding:4px 8px;border-radius:6px;color:#526f68;background:#edf4f2;font-size:12px;font-weight:600; }
+.bc-monitor .result-pill { display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:20px;font-size:11.5px;font-weight:800;white-space:nowrap; }.bc-monitor .result-pill i {width:5px;height:5px;border-radius:50%}.bc-monitor .result-pill.success {color:#147456;background:#e8f7f1}.bc-monitor .result-pill.success i {background:#25a87d}.bc-monitor .result-pill.denied {color:#b84137;background:#ffe8e5}.bc-monitor .result-pill.denied i {background:#e75448}
+.bc-monitor .row-action { padding:5px 9px;border:1px solid #dde5e2;border-radius:7px;color:#687c77;background:#fff;font-size:12px;transition:.15s; }.bc-monitor .row-action:hover {color:#b63f36;border-color:#f1bbb6;background:#fff7f6}
+.bc-monitor .empty-state { padding:45px;text-align:center;color:#849692;font-size:13.5px; }
+.bc-monitor .panel-footer { min-height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-top:1px solid #e9efed;color:#8b9a96;font-size:12px; }.bc-monitor .panel-footer button {display:flex;align-items:center;gap:3px;color:#19715e;font-weight:700}
+
+@keyframes bc-pulse { 0%,100% {box-shadow:0 0 0 0 rgba(47,200,143,.35)}50% {box-shadow:0 0 0 5px rgba(47,200,143,0)} }
+@keyframes bc-ripple { 0% {transform:scale(.75);opacity:0}30% {opacity:1}100% {transform:scale(1.15);opacity:0} }
+@keyframes bc-card-in { from {opacity:0;transform:translateY(10px)}to {opacity:1;transform:none} }
+@keyframes bc-row-in { from {opacity:0;transform:translateX(5px)}to {opacity:1;transform:none} }
+@keyframes bc-fade-in { from {opacity:0} }
+@keyframes bc-modal-in { from {opacity:0;transform:translateY(12px) scale(.98)} }
+
+@media (max-width: 1050px) {
+  .bc-monitor .connection { display:none; }.bc-monitor .service-grid {grid-template-columns:repeat(2,1fr)}.bc-monitor .arrival-time {padding:0 18px}.bc-monitor .details-button {display:none}
+}
+
+@media (max-width: 760px) {.bc-monitor .topbar {margin-bottom:17px}.bc-monitor .topbar h1 {font-size:21px}.bc-monitor .top-actions {gap:4px}.bc-monitor .sound-button span, .bc-monitor .sound-button i {display:none}.bc-monitor .sound-button {width:36px;padding:0;justify-content:center}.bc-monitor .primary-button {padding:0 12px}.bc-monitor .top-actions>.primary-button {font-size:0}.bc-monitor .top-actions>.primary-button svg {width:19px;height:19px}
+  .bc-monitor .arrival-card { min-height:215px;display:grid;grid-template-columns:64px 1fr;padding:22px 20px;gap:16px; }.bc-monitor .scan-visual {width:64px;height:64px;align-self:start}.bc-monitor .scan-icon {width:50px;height:50px}.bc-monitor .ring-1 {width:60px;height:60px}.bc-monitor .ring-2 {width:70px;height:70px}.bc-monitor .arrival-copy h2 {font-size:24px}.bc-monitor .arrival-time {grid-column:1/3;flex-direction:row;align-items:baseline;gap:10px;padding:15px 0 0;border-top:1px solid #f0dfdc;border-right:0}.bc-monitor .arrival-time strong {font-size:26px}.bc-monitor .arrival-time small {margin-left:auto}
+  .bc-monitor .panel-header {align-items:flex-start;flex-direction:column}.bc-monitor .panel-tools {width:100%;margin:0}.bc-monitor .search-box {width:100%}
+  .bc-monitor table, .bc-monitor thead, .bc-monitor tbody, .bc-monitor tr, .bc-monitor td {display:block}.bc-monitor thead {display:none}.bc-monitor .table-wrap {padding:0 14px}.bc-monitor tbody tr {position:relative;padding:14px 0;border-bottom:1px solid #e8eeec;display:grid;grid-template-columns:1fr 1fr;gap:10px}.bc-monitor td {height:auto!important;padding:0!important;border:0!important}.bc-monitor td::before {content:attr(data-label);display:block;margin-bottom:4px;color:#91a09c;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px}.bc-monitor .person-cell {align-items:flex-start}.bc-monitor .person-cell .mini-avatar {display:none}.bc-monitor td:last-child {grid-column:2;justify-self:end;align-self:end}.bc-monitor .person-cell strong {max-width:150px;white-space:normal}.bc-monitor .panel-footer {padding:0 14px}.bc-monitor .panel-footer>span {display:none}
+}
+
+@media (max-width: 500px) {
+  .bc-monitor .service-grid {grid-template-columns:1fr 1fr;gap:9px}.bc-monitor .service-card {grid-template-columns:auto 1fr;min-height:140px;padding:14px;row-gap:8px}.bc-monitor .service-value {grid-column:2;grid-row:1;justify-self:end;line-height:1.1}.bc-monitor .service-heading {grid-column:1/3;grid-row:2}.bc-monitor .service-footer {grid-column:1/3;margin-top:2px;padding-bottom:6px}.bc-monitor .service-progress {inset:auto 14px 10px}.bc-monitor .service-heading span {white-space:nowrap;font-size:10px}
+  .bc-monitor .date-button {font-size:0;width:38px;padding:0;justify-content:center}.bc-monitor .panel-header {padding:16px}.bc-monitor .activity-panel {border-radius:14px}.bc-monitor .result-line {align-items:flex-start;flex-direction:column;gap:6px}
+}
+
+
+/* --- Agregados para BioCook --- */
+
+/* Colores de la tarjeta grande según el resultado (por defecto: rechazo en rojo) */
+.bc-monitor .arrival-card { --c: #e34b40; --c-suave: #ffe6e2; --c-texto: #b9362e; --c-borde: #f1cfca; --c-fondo: #fff7f5; --c-etiqueta: #9d6963; }
+.bc-monitor .arrival-card.ok { --c: #1f9d6c; --c-suave: #e2f6ec; --c-texto: #137049; --c-borde: #c6ead8; --c-fondo: #f2fbf6; --c-etiqueta: #4f8c72; }
+.bc-monitor .arrival-card.warn { --c: #e08a1e; --c-suave: #fff0d9; --c-texto: #9a5a06; --c-borde: #f4dcb5; --c-fondo: #fffaf1; --c-etiqueta: #9a7440; }
+.bc-monitor .arrival-card.muted { --c: #7a8a86; --c-suave: #edf1f0; --c-texto: #56645f; --c-borde: #dde4e1; --c-fondo: #f7f9f8; --c-etiqueta: #7a8a86; }
+.bc-monitor .arrival-card.espera { --c: #9fb0ab; --c-suave: #eef2f1; --c-texto: #6b7a76; --c-borde: #e0e7e4; --c-fondo: #fafbfb; --c-etiqueta: #87958f; }
+.bc-monitor .arrival-card { border-color: var(--c-borde); background: linear-gradient(105deg, #fff 0%, #fff 55%, var(--c-fondo) 100%); }
+.bc-monitor .arrival-accent { background: var(--c); }
+.bc-monitor .scan-icon { background: var(--c); box-shadow: 0 9px 24px color-mix(in srgb, var(--c) 30%, transparent); }
+.bc-monitor .scan-ring { border-color: color-mix(in srgb, var(--c) 20%, transparent); }
+.bc-monitor .arrival-label { color: var(--c-etiqueta); }
+.bc-monitor .result-line span { color: var(--c-texto); background: var(--c-suave); }
+.bc-monitor .arrival-time { border-right-color: var(--c-borde); }
+.bc-monitor .arrival-card.espera .scan-ring { animation: none; opacity: 0; }
+.bc-monitor .details-button { color: var(--c-texto); }
+
+/* En vivo / sin conexión */
+.bc-monitor .eyebrow.caido { color: #c0443a; }
+.bc-monitor .eyebrow.caido .live-dot { background: #e5584d; animation: none; }
+.bc-monitor .connection .punto-eq { width: 7px; height: 7px; border-radius: 50%; background: #26c281; box-shadow: 0 0 0 3px rgba(38,194,129,.13); }
+.bc-monitor .connection.off { color: #b0443b; border-color: #f2cdc9; background: #fff7f6; }
+.bc-monitor .connection.off .punto-eq { background: #e5584d; box-shadow: 0 0 0 3px rgba(229,88,77,.13); }
+.bc-monitor .error-monitor { max-width: 1440px; margin: 0 auto 14px; padding: 11px 14px; border-radius: 12px; color: #a32a24; background: #fde8e6; border: 1px solid #f6c9c4; font-size: 13.5px; }
+
+/* Servicio en curso */
+.bc-monitor .service-card.actual { border-color: #7cc9b0; box-shadow: 0 0 0 3px rgba(38,143,115,.1), 0 9px 25px rgba(43,72,65,.08); }
+.bc-monitor .service-heading .ahora-tag { white-space: nowrap; display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 999px; color: #fff; background: #14745f; font-size: 10px; font-weight: 800; letter-spacing: .4px; vertical-align: 1px; }
+
+/* Resultados del listado: además de autorizado/rechazado, "ya retiró" y "fuera de horario" */
+.bc-monitor .result-pill.warn { color: #9a5a06; background: #fff0d9; }
+.bc-monitor .result-pill.warn i { background: #e08a1e; }
+.bc-monitor .result-pill.muted { color: #5c6b67; background: #edf1f0; }
+.bc-monitor .result-pill.muted i { background: #94a3a0; }
+.bc-monitor .manual-pill { margin-left: 6px; padding: 2px 7px; border-radius: 6px; color: #5b6f6a; background: #eef2f1; font-size: 11px; font-weight: 700; }
+.bc-monitor .filtro-select { height: 36px; padding: 0 10px; border: 1px solid #dde6e3; border-radius: 9px; color: #536b66; background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+.bc-monitor .panel-footer a { display: flex; align-items: center; gap: 3px; color: #19715e; font-weight: 700; text-decoration: none; }
+
+@media (max-width: 760px) {
+  .bc-monitor .manual-pill { display: inline-block; margin: 4px 0 0; }
+  .bc-monitor .person-cell { flex-wrap: wrap; }
+  .bc-monitor .sound-button { color: #a3b2ae; }
+  .bc-monitor .sound-button.on { color: #14745f; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bc-monitor *, .bc-monitor *::before, .bc-monitor *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
