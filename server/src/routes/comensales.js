@@ -5,6 +5,10 @@ const Auditoria = require('../models/Auditoria');
 const Plantilla = require('../models/Plantilla');
 const { enviarAlta, enviarBaja } = require('../adms/comandos');
 const a = require('../utils/async');
+const Dispositivo = require('../models/Dispositivo');
+const Comando = require('../models/Comando');
+const gestor4370 = require('../reloj4370/gestor');
+const { DEDOS } = require('../reloj4370/protocolo');
 const { escapeRegex } = require('../utils/async');
 
 const router = express.Router();
@@ -130,6 +134,51 @@ router.post(
     if (!c || !c.activo) return res.status(404).json({ error: 'No encontrado o inactivo' });
     const comandos = await enviarAlta(c, undefined, { conBiometria: true });
     res.json({ encolados: comandos.length });
+  })
+);
+
+// Enrolar una huella desde la web: el reloj elegido le pide a la persona que apoye el dedo.
+// El avance llega en vivo por el evento "enrolamiento" (socket.io).
+router.post(
+  '/:id/enrolar',
+  a(async (req, res) => {
+    const c = await Comensal.findById(req.params.id);
+    if (!c || !c.activo) return res.status(404).json({ error: 'No hay un comensal activo con ese ID' });
+    const dedo = Number(req.body?.dedo ?? 6);
+    if (!Number.isInteger(dedo) || dedo < 0 || dedo > 9) return res.status(400).json({ error: 'Dedo inválido' });
+
+    const eq = await Dispositivo.findOne({ sn: String(req.body?.sn || '') });
+    if (!eq) return res.status(404).json({ error: 'Elegí un reloj' });
+    if (eq.modo !== '4370') {
+      return res.status(400).json({ error: 'Este reloj está conectado por ADMS: la huella se enrola en el equipo' });
+    }
+    if (eq.habilitado === false) return res.status(400).json({ error: 'El reloj está deshabilitado' });
+    if (!gestor4370.conectado(eq.sn)) {
+      return res.status(409).json({ error: 'El reloj no está conectado en este momento. Revisá que esté prendido y en red.' });
+    }
+
+    // Un enrolamiento a la vez por reloj: se descartan pedidos anteriores que no empezaron
+    await Comando.updateMany(
+      { deviceSn: eq.sn, tipo: 'enrolar', estado: 'pendiente' },
+      { $set: { estado: 'error', retorno: -9999 } }
+    );
+    const cmd = await Comando.encolar({ deviceSn: eq.sn, texto: `ENROLAR PIN=${c.pin} DEDO=${dedo}`, tipo: 'enrolar', pin: c.pin });
+    await Auditoria.registrar(req, 'enrolar_huella', 'comensal', c.pin, { sn: eq.sn, dedo: DEDOS[dedo] });
+    gestor4370.despertar(eq.sn);
+    res.status(202).json({ cmdId: cmd.cmdId, sn: eq.sn, dedo });
+  })
+);
+
+router.post(
+  '/:id/enrolar/cancelar',
+  a(async (req, res) => {
+    const sn = String(req.body?.sn || '');
+    const enCurso = gestor4370.cancelarEnrolamiento(sn);
+    const r = await Comando.updateMany(
+      { deviceSn: sn, tipo: 'enrolar', estado: 'pendiente' },
+      { $set: { estado: 'error', retorno: -9999 } }
+    );
+    res.json({ cancelado: enCurso || r.modifiedCount > 0 });
   })
 );
 

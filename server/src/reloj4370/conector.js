@@ -62,7 +62,7 @@ class Conector {
         if (!this.zk) await this.conectar();
         await this.ciclo();
         this.fallos = 0;
-        await esperar(this.intervaloMs);
+        await this.dormir(this.intervaloMs);
       } catch (err) {
         if (this.detenido) break;
         this.fallos++;
@@ -72,9 +72,31 @@ class Conector {
           await Dispositivo.updateOne({ _id: this.id }, { $set: { ultimoError: causa, ultimoErrorEn: new Date() } }).catch(() => {});
         }
         await this.cerrar();
-        await esperar(Math.min(30000, this.intervaloMs * this.fallos));
+        await this.dormir(Math.min(30000, this.intervaloMs * this.fallos));
       }
     }
+  }
+
+  // Espera entre ciclos; despertar() la corta (por ejemplo, para enrolar sin demora)
+  dormir(ms) {
+    return new Promise((ok) => {
+      const t = setTimeout(ok, ms);
+      this.despertarYa = () => {
+        clearTimeout(t);
+        ok();
+      };
+    });
+  }
+
+  despertar() {
+    if (this.despertarYa) this.despertarYa();
+  }
+
+  // Cancela el enrolamiento en curso. Devuelve true si había uno.
+  cancelarEnrolamiento() {
+    if (!this.enrolando) return false;
+    this.enrolando.cancelar = true;
+    return true;
   }
 
   async cerrar() {
@@ -87,7 +109,7 @@ class Conector {
     this.zk = await zk.abrir({ ip: this.ip, puerto: this.puerto, protocolo: this.protocolo });
     if (this.detenido) return this.cerrar();
 
-    const [serie, firmware] = [await zk.opcion(this.zk, '~SerialNumber'), await zk.version(this.zk)];
+    const [serie, firmware] = [await zk.numeroDeSerie(this.zk), await zk.version(this.zk)];
     await this.asegurarIdentidad(serie);
 
     const via = this.zk.connectionType;
@@ -158,6 +180,10 @@ class Conector {
     } catch (err) {
       if (esErrorDeConexion(err)) throw err;
       total = null; // si el firmware no lo informa, sincronizamos igual (más lento)
+      if (!this.avisoSinCantidades) {
+        this.avisoSinCantidades = true;
+        this.log('este reloj no informa cantidades: se descargan las fichadas en cada ciclo');
+      }
     }
     await Dispositivo.updateOne({ _id: this.id }, { $set: cambios });
     tiempoReal.emitir('dispositivo', { sn: this.sn, ultimaConexion: ahora });
@@ -225,7 +251,12 @@ class Conector {
       cantidad,
       preferido: this.formato,
     });
-    if (this.formatoConfig === 'auto' && r.formato && r.formato !== this.formato) this.formato = r.formato;
+    if (r.formato && r.formato !== this.formato) {
+      if (this.formatoConfig !== 'auto' && r.formato !== this.formatoConfig) {
+        this.log(`el equipo usa el formato ${r.formato} (estaba configurado ${this.formatoConfig}): se usa el del equipo`);
+      }
+      this.formato = r.formato;
+    }
     await Dispositivo.updateOne({ _id: this.id }, { $set: { formatoDetectado: this.formato } });
 
     const lista = r.usuarios;
@@ -300,10 +331,72 @@ class Conector {
     await UsuarioReloj.deleteOne({ deviceSn: this.sn, pin });
   }
 
+  // Enrola una huella: el reloj le pide a la persona que apoye el dedo 3 veces.
+  // El avance se avisa en vivo a la web (evento "enrolamiento").
+  async enrolar(cmd) {
+    const dedo = Number(/DEDO=(\d)/.exec(cmd.texto)?.[1] ?? 6);
+    const c = await Comensal.findOne({ pin: cmd.pin }).lean();
+    const avisar = (e) =>
+      tiempoReal.emitir('enrolamiento', { cmdId: cmd.cmdId, sn: this.sn, pin: cmd.pin, nombre: c?.nombre, dedo, ...e });
+    if (!c) {
+      avisar({ estado: 'error', mensaje: 'La persona ya no existe en el sistema' });
+      throw Object.assign(new Error('el comensal ya no existe'), { retorno: -2 });
+    }
+    // Un pedido viejo (el reloj estaba desconectado) ya no tiene a nadie esperando frente al equipo
+    if (Date.now() - new Date(cmd.createdAt).getTime() > 3 * 60 * 1000) {
+      avisar({ estado: 'error', mensaje: 'El pedido venció: el reloj no estaba disponible' });
+      throw Object.assign(new Error('pedido de enrolamiento vencido'), { retorno: -8 });
+    }
+
+    avisar({ estado: 'preparando' });
+    if (!this.usuarios.has(c.pin)) await this.altaUsuario(c); // tiene que estar cargada en el reloj
+    const u = this.usuarios.get(c.pin);
+
+    this.enrolando = { cancelar: false };
+    let r;
+    try {
+      r = await zk.enrolarHuella(this.zk, {
+        formato: this.formato,
+        pin: c.pin,
+        dedo,
+        onEvento: avisar,
+        debeCancelar: () => this.enrolando?.cancelar,
+      });
+    } finally {
+      this.enrolando = null;
+    }
+
+    // Confirmamos con el reloj si quedó guardada (aunque se haya cancelado al final)
+    await esperar(600);
+    const tiene = await zk.tieneHuella(this.zk, { uid: u.uid, dedo });
+    await this.cerrar(); // la consulta puede dejar datos en camino: reconectamos limpio
+
+    let final = r.estado;
+    if (tiene === true) final = 'ok';
+    else if (r.estado === 'ok' && tiene === false) final = 'no_guardada';
+    this.log(`enrolamiento de ${c.pin} (${zk.DEDOS[dedo]}): ${final}${tiene === null ? ' (sin verificar)' : ''}`);
+
+    if (final === 'ok') {
+      await Comensal.updateOne({ pin: c.pin }, { $set: { tieneBiometria: true } });
+      await UsuarioReloj.updateOne(
+        { deviceSn: this.sn, pin: c.pin },
+        { $set: { tieneBiometria: true, vistoEn: new Date() } },
+        { upsert: true }
+      );
+      avisar({ estado: 'ok', verificado: tiene === true });
+      return;
+    }
+    avisar({ estado: final, mensaje: r.mensaje });
+    const codigos = { duplicada: -5, cancelado: -4, tiempo: -6, no_guardada: -7 };
+    throw Object.assign(new Error(`enrolamiento: ${final}${r.mensaje ? ` (${r.mensaje})` : ''}`), {
+      retorno: codigos[final] ?? -1,
+    });
+  }
+
   async procesarComandos() {
     const pendientes = await Comando.find({ deviceSn: this.sn, estado: 'pendiente' }).sort({ cmdId: 1 }).limit(50);
     for (const cmd of pendientes) {
-      if (this.detenido) return;
+      if (this.detenido || !this.zk) return; // (después de enrolar se reconecta)
       cmd.estado = 'enviado';
       cmd.enviadoEn = new Date();
       cmd.intentos = (cmd.intentos || 0) + 1;
@@ -313,7 +406,8 @@ class Conector {
         cmd.retorno = 0;
       } catch (err) {
         // Si se cortó la conexión, el comando vuelve a la cola y se reintenta
-        if (esErrorDeConexion(err)) {
+        // (salvo enrolar: la persona ya no va a estar frente al reloj)
+        if (esErrorDeConexion(err) && cmd.tipo !== 'enrolar') {
           cmd.estado = 'pendiente';
           await cmd.save();
           throw err;
@@ -361,6 +455,8 @@ class Conector {
         return;
       case 'info':
         return; // los datos se actualizan solos en cada ciclo
+      case 'enrolar':
+        return this.enrolar(cmd);
       case 'biometria':
         throw Object.assign(new Error('restaurar biometría no está disponible por 4370'), { retorno: -1002 });
       default:

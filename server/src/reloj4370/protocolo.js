@@ -9,6 +9,7 @@
 
 const Zkteco = require('zkteco-js');
 const { COMMANDS, REQUEST_DATA } = require('zkteco-js/src/helper/command');
+const { createTCPHeader, createUDPHeader } = require('zkteco-js/src/helper/utils');
 
 const CMD = {
   ACK_OK: COMMANDS.CMD_ACK_OK,
@@ -20,6 +21,13 @@ const CMD = {
   REFRESHDATA: 1013,
   USER_WRQ: 8,
   DELETE_USER: 18,
+  STARTVERIFY: 60,
+  STARTENROLL: 61,
+  CANCELCAPTURE: 62,
+  GET_USERTEMP: 88,
+  REG_EVENT: 500,
+  PREPARE_DATA: 1500,
+  DATA: 1501,
 };
 
 const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms));
@@ -110,6 +118,19 @@ async function opcion(zk, clave) {
   }
 }
 
+// Un número de serie válido son solo letras y números. Algunos firmwares a veces devuelven la
+// respuesta corrupta (por ejemplo "A=WD221860296" en vez de "AEWD221860296"): reintentamos y, si
+// sigue mal, se descarta para no registrar el mismo reloj dos veces.
+const serieValida = (s) => /^[A-Za-z0-9]{5,32}$/.test(s || '');
+
+async function numeroDeSerie(zk, intentos = 3) {
+  for (let i = 0; i < intentos; i++) {
+    const s = await opcion(zk, '~SerialNumber');
+    if (serieValida(s)) return s;
+  }
+  return null;
+}
+
 async function version(zk) {
   try {
     return textoRespuesta(await comando(zk, CMD.GET_VERSION)) || null;
@@ -187,7 +208,9 @@ function decodificarUsuario(b) {
 // `preferido`: si no se puede saber por la cantidad, qué formato probar primero
 async function leerUsuarios(zk, { formato, cantidad, preferido } = {}) {
   const datos = await leerBloque(zk, REQUEST_DATA.GET_USERS);
-  const candidatos = formato === 'nuevo' ? [72] : formato === 'viejo' ? [28] : preferido === 'viejo' ? [28, 72] : [72, 28];
+  // El formato configurado es solo una preferencia: manda lo que realmente coincide con los datos
+  // (hay equipos "antiguos", como algunos 628-C, con firmware que ya usa el formato nuevo)
+  const candidatos = (formato || preferido) === 'viejo' ? [28, 72] : [72, 28];
   const tamanio = tamanioRegistro(datos.length, cantidad, candidatos);
   if (!tamanio) throw new Error(`no se reconoce el formato de usuarios (${datos.length} bytes)`);
 
@@ -204,7 +227,7 @@ async function leerUsuarios(zk, { formato, cantidad, preferido } = {}) {
 // `pinPorUid`: en el registro de 8 bytes el reloj guarda el número interno, no el PIN
 async function leerFichadas(zk, { formato, cantidad, pinPorUid = new Map() } = {}) {
   const datos = await leerBloque(zk, REQUEST_DATA.GET_ATTENDANCE_LOGS);
-  const candidatos = formato === 'nuevo' ? [40] : formato === 'viejo' ? [16, 8] : [40, 16, 8];
+  const candidatos = formato === 'viejo' ? [16, 8, 40] : [40, 16, 8];
   const tamanio = tamanioRegistro(datos.length, cantidad, candidatos);
   if (!tamanio) throw new Error(`no se reconoce el formato de fichadas (${datos.length} bytes)`);
 
@@ -283,6 +306,165 @@ async function borrarUsuario(zk, uid) {
 const vaciarFichadas = (zk) => comando(zk, CMD.CLEAR_ATTLOG);
 const reiniciar = (zk) => comando(zk, CMD.RESTART);
 
+// --- Enrolamiento de huella a distancia ---
+//
+// Secuencia (la misma que usa el software de ZKTeco):
+//   1. STARTENROLL con el PIN y el dedo: el reloj muestra "apoye el dedo" en su pantalla.
+//   2. Por cada una de las 3 lecturas el reloj manda eventos (REG_EVENT): uno al detectar el dedo y
+//      otro con 100 cuando la lectura salió bien. 4 = cancelado, 6 = se agotó el tiempo.
+//   3. Al final manda el resultado: 0 = guardada, 5 = esa huella ya es de otra persona.
+// Los eventos llegan sin que se los pida, así que se escuchan directo en el socket y se confirman (ACK).
+// El resultado se verifica después pidiendo la plantilla de ese dedo.
+
+// Dedos según la numeración de ZKTeco: 0-4 mano izquierda (meñique → pulgar), 5-9 derecha (pulgar → meñique)
+const DEDOS = [
+  'meñique izquierdo', 'anular izquierdo', 'mayor izquierdo', 'índice izquierdo', 'pulgar izquierdo',
+  'pulgar derecho', 'índice derecho', 'mayor derecho', 'anular derecho', 'meñique derecho',
+];
+
+function enviarCrudo(zk, paquete) {
+  const t = transporte(zk);
+  if (!t.socket) return;
+  if (zk.connectionType === 'udp') t.socket.send(paquete, 0, paquete.length, t.port, t.ip, () => {});
+  else t.socket.write(paquete);
+}
+
+// Confirma un evento recibido (si no, el reloj lo repite)
+function ack(zk) {
+  const t = transporte(zk);
+  const crear = zk.connectionType === 'udp' ? createUDPHeader : createTCPHeader;
+  enviarCrudo(zk, crear(CMD.ACK_OK, t.sessionId || 0, 65533, Buffer.alloc(0)));
+}
+
+// Escucha los paquetes que manda el reloj por su cuenta. Devuelve una función para dejar de escuchar.
+function escucharEventos(zk, alRecibir) {
+  const t = transporte(zk);
+  if (zk.connectionType === 'udp') {
+    const h = (msg) => msg.length >= 8 && alRecibir(msg.readUInt16LE(0), msg.subarray(8));
+    t.socket.on('message', h);
+    return () => t.socket?.removeListener('message', h);
+  }
+  let pendiente = Buffer.alloc(0);
+  const h = (chunk) => {
+    pendiente = Buffer.concat([pendiente, chunk]);
+    while (pendiente.length >= 8 && pendiente.readUInt32LE(0) === 0x7d825050) {
+      const largo = pendiente.readUInt32LE(4);
+      if (pendiente.length < 8 + largo) return;
+      const p = pendiente.subarray(8, 8 + largo);
+      pendiente = pendiente.subarray(8 + largo);
+      if (p.length >= 8) alRecibir(p.readUInt16LE(0), p.subarray(8));
+    }
+    if (pendiente.length >= 4 && pendiente.readUInt32LE(0) !== 0x7d825050) pendiente = Buffer.alloc(0);
+  };
+  t.socket.on('data', h);
+  return () => t.socket?.removeListener('data', h);
+}
+
+// Devuelve { estado: 'ok' | 'duplicada' | 'cancelado' | 'tiempo' | 'error', mensaje? }
+// onEvento({ estado: 'esperando' | 'leyendo' | 'lectura' | 'reintentar' | 'procesando', lectura })
+async function enrolarHuella(zk, { formato, pin, dedo, onEvento = () => {}, debeCancelar = () => false, timeoutMs = 60000 }) {
+  const eventos = [];
+  let avisar = null;
+  const dejar = escucharEventos(zk, (cmd, datos) => {
+    if (cmd !== CMD.REG_EVENT) return;
+    ack(zk);
+    eventos.push(datos.length >= 2 ? datos.readUInt16LE(0) : 0);
+    if (avisar) avisar();
+  });
+  // Espera el próximo evento (o la cancelación, o que se acabe el tiempo)
+  const siguiente = (hasta) =>
+    new Promise((ok) => {
+      let timer = null;
+      const terminar = (valor) => {
+        clearInterval(timer);
+        avisar = null;
+        ok(valor);
+        return true;
+      };
+      // Devuelve true si ya terminó la espera
+      const revisar = () => {
+        if (eventos.length) return terminar(eventos.shift());
+        if (debeCancelar()) return terminar('cancelar');
+        if (Date.now() >= hasta) return terminar(null);
+        return false;
+      };
+      if (!revisar()) {
+        avisar = revisar;
+        timer = setInterval(revisar, 250);
+      }
+    });
+
+  try {
+    await comando(zk, CMD.CANCELCAPTURE).catch(() => {});
+    let datos;
+    if (formato === 'viejo') {
+      datos = Buffer.alloc(5);
+      datos.writeUInt32LE(Number(pin), 0);
+      datos.writeInt8(dedo, 4);
+    } else {
+      datos = Buffer.alloc(26);
+      datos.write(String(pin), 0, 24, 'latin1');
+      datos.writeInt8(dedo, 24);
+      datos.writeInt8(1, 25);
+    }
+    try {
+      await comando(zk, CMD.STARTENROLL, datos);
+    } catch (err) {
+      return { estado: 'error', mensaje: `el reloj no aceptó el pedido de enrolar (${err.message})` };
+    }
+    onEvento({ estado: 'esperando', lectura: 1 });
+
+    const hasta = Date.now() + timeoutMs;
+    let lecturas = 0;
+    for (;;) {
+      const res = await siguiente(hasta);
+      if (res === 'cancelar') {
+        enviarCrudo(zk, (zk.connectionType === 'udp' ? createUDPHeader : createTCPHeader)(CMD.CANCELCAPTURE, transporte(zk).sessionId || 0, 1, Buffer.alloc(0)));
+        return { estado: 'cancelado' };
+      }
+      if (res === null) return { estado: 'tiempo' };
+      if (res === 4) return { estado: 'cancelado' };
+      if (res === 6) return { estado: 'tiempo' };
+      if (lecturas < 3) {
+        if (res === 100) {
+          lecturas++;
+          onEvento(lecturas < 3 ? { estado: 'lectura', lectura: lecturas } : { estado: 'procesando', lectura: 3 });
+        } else if (res === 0) {
+          onEvento({ estado: 'reintentar', lectura: lecturas + 1 });
+        } else {
+          onEvento({ estado: 'leyendo', lectura: lecturas + 1 });
+        }
+        continue;
+      }
+      if (res === 5) return { estado: 'duplicada' };
+      return { estado: 'ok' };
+    }
+  } finally {
+    dejar();
+    // Devolvemos el reloj a su modo normal
+    await comando(zk, CMD.REG_EVENT, Buffer.alloc(4)).catch(() => {});
+    await comando(zk, CMD.CANCELCAPTURE).catch(() => {});
+    await comando(zk, CMD.STARTVERIFY).catch(() => {});
+  }
+}
+
+// ¿El reloj tiene guardada la huella de ese dedo? true / false / null (no se pudo saber).
+// Ojo: si la tiene, el reloj puede mandar la plantilla en varias partes; conviene reconectar después.
+async function tieneHuella(zk, { uid, dedo }) {
+  const datos = Buffer.alloc(3);
+  datos.writeInt16LE(uid, 0);
+  datos.writeInt8(dedo, 2);
+  try {
+    const r = await transporte(zk).executeCmd(CMD.GET_USERTEMP, datos);
+    const codigo = r?.length >= 2 ? r.readUInt16LE(0) : null;
+    if (codigo === CMD.DATA || codigo === CMD.PREPARE_DATA) return true;
+    if (codigo === CMD.ACK_OK) return r.length > 16;
+    return false;
+  } catch {
+    return null;
+  }
+}
+
 // Formato a usar cuando el reloj todavía no tiene usuarios para detectarlo
 function formatoPorDefecto({ firmware, protocolo }) {
   if (/ver\s*6\./i.test(firmware || '')) return 'viejo';
@@ -295,6 +477,8 @@ module.exports = {
   cerrar,
   comando,
   opcion,
+  numeroDeSerie,
+  serieValida,
   version,
   cantidades,
   leerUsuarios,
@@ -303,6 +487,9 @@ module.exports = {
   borrarUsuario,
   vaciarFichadas,
   reiniciar,
+  DEDOS,
+  enrolarHuella,
+  tieneHuella,
   formatoPorDefecto,
   nombreParaReloj,
   registroUsuario,

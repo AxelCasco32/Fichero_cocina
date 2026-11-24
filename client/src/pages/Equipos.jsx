@@ -12,7 +12,7 @@ const ESTADO_COMANDO = { ok: 'aplicado', error: 'error', pendiente: 'en cola', e
 // Tipos de equipo: completan la configuración de conexión recomendada
 const TIPOS = [
   { id: 'nuevo', texto: 'MB360 u otro equipo nuevo (firmware 8)', modelo: 'MB360', protocolo: 'auto', formato: 'auto' },
-  { id: 'viejo', texto: '628-C u otro equipo antiguo (firmware 6)', modelo: '628-C', protocolo: 'auto', formato: 'viejo' },
+  { id: 'viejo', texto: '628-C u otro equipo antiguo', modelo: '628-C', protocolo: 'auto', formato: 'auto' },
   { id: 'otro', texto: 'Otro / no sé (detectar automáticamente)', modelo: '', protocolo: 'auto', formato: 'auto' },
 ];
 const TEXTO_FORMATO = { nuevo: 'Nuevo (firmware 8)', viejo: 'Antiguo (firmware 6)' };

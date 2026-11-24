@@ -24,8 +24,41 @@ const SN = VIEJO ? 'SIMVIEJO' : 'SIM4370';
 const C = {
   CONNECT: 1000, EXIT: 1001, ACK_OK: 2000, OPTIONS_RRQ: 11, GET_VERSION: 1100, FREE_SIZES: 50,
   DATA_WRRQ: 1503, DATA: 1501, FREE_DATA: 1502, USER_WRQ: 8, DELETE_USER: 18, REFRESHDATA: 1013,
-  CLEAR_ATTLOG: 15, RESTART: 1004,
+  CLEAR_ATTLOG: 15, RESTART: 1004, STARTENROLL: 61, CANCELCAPTURE: 62, GET_USERTEMP: 88, REG_EVENT: 500,
+  ACK_ERROR: 2001,
 };
+
+// Enrolamiento simulado: huellas guardadas ("uid:dedo") y cómo termina el próximo enrolamiento
+// (se cambia con  curl "http://localhost:4371/enrolar?resultado=duplicada"  — ok | duplicada | tiempo)
+const huellas = new Set();
+let resultadoEnrolar = 'ok';
+let enrolando = null; // { timers, enviar }
+
+function evento(enviar, codigo) {
+  const d = Buffer.alloc(2);
+  d.writeUInt16LE(codigo, 0);
+  enviar(paquete(C.REG_EVENT, 1, 0, d));
+}
+
+function empezarEnrolamiento(uid, dedo, enviar) {
+  const timers = [];
+  const en = (ms, fn) => timers.push(setTimeout(fn, ms));
+  enrolando = { timers, enviar };
+  console.log(`[reloj] enrolando uid ${uid} dedo ${dedo}: "apoye el dedo" (resultado simulado: ${resultadoEnrolar})`);
+  if (resultadoEnrolar === 'tiempo') {
+    en(6000, () => { evento(enviar, 6); enrolando = null; });
+    return;
+  }
+  for (let i = 1; i <= 3; i++) {
+    en(i * 1800, () => evento(enviar, 60)); // dedo detectado (calidad)
+    en(i * 1800 + 600, () => { evento(enviar, 100); console.log(`[reloj] lectura ${i}/3 ok`); });
+  }
+  en(3 * 1800 + 1400, () => {
+    if (resultadoEnrolar === 'duplicada') evento(enviar, 5);
+    else { huellas.add(`${uid}:${dedo}`); evento(enviar, 0); console.log('[reloj] huella guardada'); }
+    enrolando = null;
+  });
+}
 
 const usuarios = new Map([
   [1, { uid: 1, pin: '1001', nombre: 'GONZALEZ MARIA' }],
@@ -113,14 +146,17 @@ function bloqueFichadas() {
   return conTotal(regs, REGISTRO);
 }
 
-// Atiende un comando y devuelve el paquete de respuesta (o null si hay que cortar)
-function responder(p, cortar) {
+// Atiende un comando y devuelve el paquete de respuesta.
+// `enviar` manda paquetes por iniciativa del reloj (eventos del enrolamiento).
+function responder(p, cortar, enviar) {
   const cmd = p.readUInt16LE(0);
   const reply = p.readUInt16LE(6);
   const datos = p.subarray(8);
   const ok = (d) => paquete(C.ACK_OK, 1, reply, d);
 
   switch (cmd) {
+    case C.ACK_OK:
+      return null; // confirmación de un evento: un reloj real no la contesta
     case C.OPTIONS_RRQ: {
       const clave = datos.toString('latin1').replace(/\0/g, '');
       return ok(Buffer.from(clave === '~SerialNumber' ? `~SerialNumber=${SN}\0` : `${clave}=\0`, 'latin1'));
@@ -149,6 +185,27 @@ function responder(p, cortar) {
       usuarios.delete(uid);
       return ok();
     }
+    case C.STARTENROLL: {
+      const pin = VIEJO ? String(datos.readUInt32LE(0)) : leerTexto(datos.subarray(0, 24));
+      const dedo = VIEJO ? datos.readInt8(4) : datos.readInt8(24);
+      const u = [...usuarios.values()].find((x) => x.pin === pin);
+      if (!u) return paquete(C.ACK_ERROR, 1, reply);
+      setTimeout(() => empezarEnrolamiento(u.uid, dedo, enviar), 50);
+      return ok();
+    }
+    case C.CANCELCAPTURE:
+      if (enrolando) {
+        enrolando.timers.forEach(clearTimeout);
+        const { enviar: env } = enrolando;
+        enrolando = null;
+        console.log('[reloj] enrolamiento cancelado');
+        setTimeout(() => evento(env, 4), 30);
+      }
+      return ok();
+    case C.GET_USERTEMP: {
+      const clave = `${datos.readInt16LE(0)}:${datos.readInt8(2)}`;
+      return huellas.has(clave) ? paquete(C.DATA, 1, reply, Buffer.from('PLANTILLA-SIMULADA')) : paquete(C.ACK_ERROR, 1, reply);
+    }
     case C.CLEAR_ATTLOG:
       fichadas.length = 0;
       console.log('[reloj] memoria de fichadas vaciada');
@@ -168,8 +225,9 @@ if (VIEJO) {
   const sock = dgram.createSocket('udp4');
   sock.on('message', (msg, rinfo) => {
     if (msg.length < 8) return;
-    const r = responder(msg, () => {});
-    if (r) sock.send(r, rinfo.port, rinfo.address);
+    const enviar = (pkt) => sock.send(pkt, rinfo.port, rinfo.address);
+    const r = responder(msg, () => {}, enviar);
+    if (r) enviar(r);
   });
   sock.bind(PUERTO, () => console.log(`[reloj] simulador 4370 escuchando en ${PUERTO}: ${descripcion}`));
 } else {
@@ -185,7 +243,7 @@ if (VIEJO) {
           const p = pendiente.subarray(8, 8 + largo);
           pendiente = pendiente.subarray(8 + largo);
           let fin = false;
-          const r = responder(p, () => (fin = true));
+          const r = responder(p, () => (fin = true), (pkt) => !sock.destroyed && sock.write(tramaTcp(pkt)));
           if (r) sock.write(tramaTcp(r));
           if (fin) sock.end();
         }
@@ -206,9 +264,12 @@ http
       fichadas.push({ pin, fecha });
       console.log(`[reloj] fichó ${pin} a las ${fecha.toLocaleTimeString('es-AR')}`);
       res.end('ok\n');
+    } else if (url.pathname === '/enrolar') {
+      resultadoEnrolar = url.searchParams.get('resultado') || 'ok';
+      res.end(`el próximo enrolamiento termina: ${resultadoEnrolar}\n`);
     } else if (url.pathname === '/estado') {
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ usuarios: [...usuarios.values()], fichadas: fichadas.length }, null, 1));
+      res.end(JSON.stringify({ usuarios: [...usuarios.values()], fichadas: fichadas.length, huellas: [...huellas] }, null, 1));
     } else {
       res.statusCode = 404;
       res.end();
