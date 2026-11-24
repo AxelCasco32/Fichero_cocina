@@ -41,7 +41,7 @@ function decodificarFecha(n) {
 }
 
 // Enrolamiento simulado: huellas guardadas ("uid:dedo") y cómo termina el próximo enrolamiento
-// (se cambia con  curl "http://localhost:4371/enrolar?resultado=duplicada"  — ok | duplicada | tiempo)
+// (se cambia con  curl "http://localhost:4371/enrolar?resultado=duplicada"  — ok | duplicada | tiempo | otros-codigos)
 const huellas = new Set();
 let resultadoEnrolar = 'ok';
 let enrolando = null; // { timers, enviar }
@@ -57,6 +57,12 @@ function empezarEnrolamiento(uid, dedo, enviar) {
   const en = (ms, fn) => timers.push(setTimeout(fn, ms));
   enrolando = { timers, enviar };
   console.log(`[reloj] enrolando uid ${uid} dedo ${dedo}: "apoye el dedo" (resultado simulado: ${resultadoEnrolar})`);
+  if (resultadoEnrolar === 'otros-codigos') {
+    // Firmware que avisa distinto: un 0 por lectura, guarda la huella y no manda resultado final
+    for (let i = 1; i <= 3; i++) en(i * 1500, () => evento(enviar, 0));
+    en(5200, () => { huellas.add(`${uid}:${dedo}`); console.log('[reloj] huella guardada (sin aviso final)'); enrolando = null; });
+    return;
+  }
   if (resultadoEnrolar === 'tiempo') {
     en(6000, () => { evento(enviar, 6); enrolando = null; });
     return;
