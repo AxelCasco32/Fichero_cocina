@@ -228,8 +228,11 @@ class Conector {
     const masDeMil = nuevas.length > 1000;
     if (masDeMil) this.log(`importando ${nuevas.length} fichadas del reloj (puede tardar unos minutos)…`);
 
-    // Las fichadas viejas (historial) se guardan sin avisar al monitor en vivo
-    const emitirDesde = new Date(Math.max(this.inicio.getTime(), Date.now()) - 10 * 60 * 1000);
+    // En la sincronización de rutina, todo lo nuevo se avisa en vivo al monitor (aunque el reloj tenga
+    // la hora corrida). Al importar historial (primera conexión, "Recuperar fichadas") solo se avisan
+    // las de los últimos 10 minutos, para no inundar el monitor.
+    const rutina = !desde && !hasta && !forzar && !!disp?.ultimaFichada;
+    const emitirDesde = rutina ? null : new Date(Math.max(this.inicio.getTime(), Date.now()) - 10 * 60 * 1000);
     const nombres = new Map([...this.usuarios.values()].map((u) => [u.pin, u.nombre]));
     const guardadas = await registrarFichadas(this.sn, nuevas, { emitirDesde, nombres });
 
