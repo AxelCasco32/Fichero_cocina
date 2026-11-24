@@ -28,6 +28,11 @@ const dispositivoSchema = new Schema(
     protocoloDetectado: String, // con qué se conectó la última vez
     formatoDetectado: String, // qué formato se usó la última vez
     habilitado: { type: Boolean, default: true }, // si es false, el sistema no se conecta
+    // Hora del reloj: cuántos segundos está adelantado (+) o atrasado (-) respecto del servidor
+    desfaseHora: Number,
+    horaLeidaEn: Date,
+    horaAutomatica: { type: Boolean, default: false }, // corregirla sola si se corre más de 1 minuto
+    horaCorregidaEn: Date,
     ultimoError: String, // por qué no se pudo conectar (se limpia al conectar)
     ultimoErrorEn: Date,
   },

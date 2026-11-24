@@ -193,7 +193,37 @@ class Conector {
       this.ultimoTotalFichadas = total;
     }
 
+    await this.controlarHora();
     await this.procesarComandos();
+  }
+
+  // Cada minuto compara la hora del reloj con la del servidor. Si está corrida y el equipo tiene
+  // "poner en hora automáticamente", la corrige (como mucho una vez por hora).
+  async controlarHora({ forzar = false } = {}) {
+    if (!forzar && this.horaControladaEn && Date.now() - this.horaControladaEn < 60000) return;
+    this.horaControladaEn = Date.now();
+    let hora;
+    try {
+      hora = await zk.leerHora(this.zk);
+    } catch (err) {
+      if (esErrorDeConexion(err)) throw err;
+      return; // el firmware no lo informa
+    }
+    const desfase = Math.round((hora.getTime() - Date.now()) / 1000);
+    await Dispositivo.updateOne({ _id: this.id }, { $set: { desfaseHora: desfase, horaLeidaEn: new Date() } });
+    if (Math.abs(desfase) <= 60 || forzar) return;
+
+    const d = await Dispositivo.findById(this.id, 'horaAutomatica horaCorregidaEn').lean();
+    if (!d?.horaAutomatica) return;
+    if (d.horaCorregidaEn && Date.now() - new Date(d.horaCorregidaEn).getTime() < 3600000) return;
+    this.log(`la hora del reloj está corrida ${desfase} s: se corrige automáticamente`);
+    await this.ponerEnHora();
+  }
+
+  async ponerEnHora() {
+    await zk.ponerHora(this.zk, new Date());
+    await Dispositivo.updateOne({ _id: this.id }, { $set: { horaCorregidaEn: new Date() } });
+    await this.controlarHora({ forzar: true });
   }
 
   // Trae las fichadas del reloj y guarda las nuevas
@@ -228,8 +258,11 @@ class Conector {
     const masDeMil = nuevas.length > 1000;
     if (masDeMil) this.log(`importando ${nuevas.length} fichadas del reloj (puede tardar unos minutos)…`);
 
-    // Las fichadas viejas (historial) se guardan sin avisar al monitor en vivo
-    const emitirDesde = new Date(Math.max(this.inicio.getTime(), Date.now()) - 10 * 60 * 1000);
+    // En la sincronización de rutina, todo lo nuevo se avisa en vivo al monitor (aunque el reloj tenga
+    // la hora corrida). Al importar historial (primera conexión, "Recuperar fichadas") solo se avisan
+    // las de los últimos 10 minutos, para no inundar el monitor.
+    const rutina = !desde && !hasta && !forzar && !!disp?.ultimaFichada;
+    const emitirDesde = rutina ? null : new Date(Math.max(this.inicio.getTime(), Date.now()) - 10 * 60 * 1000);
     const nombres = new Map([...this.usuarios.values()].map((u) => [u.pin, u.nombre]));
     const guardadas = await registrarFichadas(this.sn, nuevas, { emitirDesde, nombres });
 
@@ -455,6 +488,9 @@ class Conector {
         return;
       case 'info':
         return; // los datos se actualizan solos en cada ciclo
+      case 'hora':
+        this.log('poniendo el reloj en hora');
+        return this.ponerEnHora();
       case 'enrolar':
         return this.enrolar(cmd);
       case 'biometria':

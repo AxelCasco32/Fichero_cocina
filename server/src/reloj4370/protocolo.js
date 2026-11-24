@@ -25,6 +25,8 @@ const CMD = {
   STARTENROLL: 61,
   CANCELCAPTURE: 62,
   GET_USERTEMP: 88,
+  GET_TIME: 201,
+  SET_TIME: 202,
   REG_EVENT: 500,
   PREPARE_DATA: 1500,
   DATA: 1501,
@@ -306,6 +308,29 @@ async function borrarUsuario(zk, uid) {
 const vaciarFichadas = (zk) => comando(zk, CMD.CLEAR_ATTLOG);
 const reiniciar = (zk) => comando(zk, CMD.RESTART);
 
+// --- Fecha y hora del reloj ---
+
+function codificarFecha(d) {
+  return (
+    ((d.getFullYear() % 100) * 12 * 31 + d.getMonth() * 31 + d.getDate() - 1) * 86400 +
+    (d.getHours() * 60 + d.getMinutes()) * 60 +
+    d.getSeconds()
+  );
+}
+
+async function leerHora(zk) {
+  const r = await comando(zk, CMD.GET_TIME);
+  if (r.length < 12) throw new Error('el reloj no informó la hora');
+  return decodificarFecha(r.readUInt32LE(8));
+}
+
+async function ponerHora(zk, fecha = new Date()) {
+  const d = Buffer.alloc(4);
+  d.writeUInt32LE(codificarFecha(fecha), 0);
+  await comando(zk, CMD.SET_TIME, d);
+  await comando(zk, CMD.REFRESHDATA).catch(() => {});
+}
+
 // --- Enrolamiento de huella a distancia ---
 //
 // Secuencia (la misma que usa el software de ZKTeco):
@@ -487,6 +512,8 @@ module.exports = {
   borrarUsuario,
   vaciarFichadas,
   reiniciar,
+  leerHora,
+  ponerHora,
   DEDOS,
   enrolarHuella,
   tieneHuella,

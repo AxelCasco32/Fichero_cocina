@@ -5,6 +5,9 @@ import { apiBase } from './api.js';
 
 let socket = null;
 const oyentesEstado = new Set();
+// Pantallas suscriptas a cada evento. Se guardan acá (y no en el socket) para que sigan
+// escuchando aunque la conexión se cree después de abrir la pantalla o se vuelva a crear.
+const oyentes = new Map(); // evento -> Set(fn)
 
 export function conectarSocket(token) {
   desconectarSocket();
@@ -12,7 +15,11 @@ export function conectarSocket(token) {
   const avisar = () => oyentesEstado.forEach((fn) => fn(socket?.connected || false));
   socket.on('connect', avisar);
   socket.on('disconnect', avisar);
-  socket.on('connect_error', avisar);
+  socket.on('connect_error', (err) => {
+    console.warn('[tiempo real] no se pudo conectar:', err.message);
+    avisar();
+  });
+  socket.onAny((evento, datos) => oyentes.get(evento)?.forEach((fn) => fn(datos)));
 }
 
 export function desconectarSocket() {
@@ -26,10 +33,10 @@ export function useEvento(evento, handler) {
   const ref = useRef(handler);
   ref.current = handler;
   useEffect(() => {
-    if (!socket) return undefined;
     const fn = (datos) => ref.current(datos);
-    socket.on(evento, fn);
-    return () => socket?.off(evento, fn);
+    if (!oyentes.has(evento)) oyentes.set(evento, new Set());
+    oyentes.get(evento).add(fn);
+    return () => oyentes.get(evento)?.delete(fn);
   }, [evento]);
 }
 

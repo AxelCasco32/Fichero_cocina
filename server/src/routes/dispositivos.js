@@ -112,6 +112,7 @@ router.post(
       modelo: String(req.body.modelo || '').trim() || undefined,
       modo: '4370',
       habilitado: req.body.habilitado !== false,
+      horaAutomatica: req.body.horaAutomatica === true,
     });
     await Auditoria.registrar(req, 'agregar_equipo', 'dispositivo', equipo.sn, { ...d, modelo: equipo.modelo });
     await gestor4370.recargar(equipo._id);
@@ -138,6 +139,7 @@ router.put(
       if (d.formato !== eq.formato) eq.formatoDetectado = undefined; // que se vuelva a detectar
       Object.assign(eq, d);
       if (typeof req.body.habilitado === 'boolean') eq.habilitado = req.body.habilitado;
+      if (typeof req.body.horaAutomatica === 'boolean') eq.horaAutomatica = req.body.horaAutomatica;
     }
     await eq.save();
     await Auditoria.registrar(req, 'editar_equipo', 'dispositivo', eq.sn, req.body);
@@ -289,6 +291,9 @@ router.post(
     if (SOLO_ADMIN.has(accion) && req.operador.rol !== 'admin') {
       return res.status(403).json({ error: 'Solo un administrador puede hacer esto' });
     }
+    if (accion === 'poner-hora' && req.equipo.modo !== '4370') {
+      return res.status(400).json({ error: 'Este reloj usa ADMS: la hora se pone desde el menú del equipo' });
+    }
     const params = {};
     if (accion === 'recuperar-fichadas') {
       const re = /^\d{4}-\d{2}-\d{2}$/;
@@ -299,6 +304,7 @@ router.post(
     }
     const cmd = await accionEquipo(req.equipo.sn, accion, params);
     await Auditoria.registrar(req, accion, 'dispositivo', req.equipo.sn, params);
+    gestor4370.despertar(req.equipo.sn); // que se ejecute ya, sin esperar el próximo ciclo
     res.json(cmd);
   })
 );
