@@ -3,7 +3,7 @@
 // Usa los estilos del monitor (.bc-monitor) más los propios (Reportes.css).
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
-import { fechaHora, hoy, RESULTADOS, textoResultado, tonoResultado, TZ } from '../util.js';
+import { detalleFichada, fechaHora, hoy, RESULTADOS, textoResultado, tonoResultado, TZ } from '../util.js';
 import Icono from '../components/Icono.jsx';
 import FichadaManual from '../components/FichadaManual.jsx';
 import { anularFichada, restaurarFichada } from '../components/acciones.js';
@@ -189,6 +189,7 @@ export default function Reportes() {
         { header: titulo('Nombre'), cell: (f) => texto(f.nombre), width: 30 },
         { header: titulo('Servicio'), cell: (f) => texto(f.servicio ? nombreServicio(f.servicio) : ''), width: 14 },
         { header: titulo('Resultado'), cell: (f) => texto(textoResultado(f.resultado)), width: 22 },
+        { header: titulo('Motivo'), cell: (f) => texto(detalleFichada(f)), width: 48 },
         { header: titulo('Origen'), cell: (f) => texto(f.origen === 'manual' ? `Manual (${f.cargadaPor})` : `Reloj ${f.deviceSn}`), width: 22 },
         { header: titulo('Motivo de la carga'), cell: (f) => texto(f.motivo), width: 26 },
         { header: titulo('Anulada'), cell: (f) => texto(f.anulada ? `Sí: ${f.anuladaMotivo || ''} (${f.anuladaPor})` : ''), width: 28 },
@@ -500,10 +501,11 @@ export default function Reportes() {
                         <span className="service-pill">{nombreServicio(f.servicio)}</span>
                       </td>
                       <td data-label="Resultado">
-                        <span className={`result-pill ${PILL[tono] || 'muted'}`}>
+                        <span className={`result-pill ${PILL[tono] || 'muted'}`} title={detalleFichada(f)}>
                           <i />
                           {textoResultado(f.resultado)}
                         </span>
+                        {tono !== 'ok' && <small className="motivo-fila">{detalleFichada(f)}</small>}
                       </td>
                       <td data-label="Origen" className="muted">
                         {f.origen === 'manual' ? (

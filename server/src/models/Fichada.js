@@ -19,6 +19,7 @@ const fichadaSchema = new Schema(
     dia: { type: String, required: true }, // 'YYYY-MM-DD' local
     servicio: { type: String, default: null },
     resultado: { type: String, enum: RESULTADOS, required: true },
+    detalle: String, // el motivo en palabras (por qué fue rechazada, qué retiro del día es, etc.)
     deviceSn: { type: String, required: true }, // 'MANUAL' si se cargó desde la web
     estado: Number, // estado de marcación que manda el reloj
     verificacion: Number, // 1 huella, 15 rostro, etc.

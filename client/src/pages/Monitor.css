@@ -104,6 +104,10 @@
 .bc-monitor .arrival-card.espera .scan-ring { animation: none; opacity: 0; }
 .bc-monitor .details-button { color: var(--c-texto); }
 
+/* Motivo de la fichada (por qué se rechazó, qué retiro del día es, etc.) */
+.bc-monitor .motivo-grande { margin-top: 10px; color: var(--c-texto); font-size: 17px; font-weight: 600; line-height: 1.35; }
+.bc-monitor .motivo-fila { display: block; max-width: 280px; margin-top: 4px; color: #7a8a86; font-size: 12px; line-height: 1.3; white-space: normal; }
+
 /* En vivo / sin conexión */
 .bc-monitor .eyebrow.caido { color: #c0443a; }
 .bc-monitor .eyebrow.caido .live-dot { background: #e5584d; animation: none; }

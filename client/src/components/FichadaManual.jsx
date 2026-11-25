@@ -159,6 +159,7 @@ export default function FichadaManual({ onCerrar, onGuardada }) {
           <div className={`vista-previa ${tonoResultado(vista.resultado)}`}>
             Resultado: <strong>{textoResultado(vista.resultado)}</strong>
             {vista.servicio && ` · ${vista.servicio}`}
+            {vista.detalle && <span style={{ display: 'block', marginTop: '0.2rem' }}>{vista.detalle}</span>}
             {vista.resultado !== 'autorizado' && (
               <small style={{ display: 'block' }}>
                 Se va a registrar igual, con este resultado. No cuenta como retiro.
