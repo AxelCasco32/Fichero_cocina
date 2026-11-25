@@ -12,6 +12,18 @@ export const RESULTADOS = {
 };
 
 export const textoResultado = (r) => RESULTADOS[r]?.texto || r;
+
+// Motivo en palabras. Las fichadas nuevas lo traen del servidor; para las viejas, un texto general.
+const DETALLE_GENERAL = {
+  autorizado: 'Puede retirar',
+  ya_retiro: 'Ya retiró en este servicio hoy',
+  limite_diario: 'Superó el máximo de retiros por día',
+  no_autorizado: 'No está habilitado para retirar comida',
+  servicio_no_habilitado: 'No tiene habilitado este servicio',
+  desconocido: 'No está registrado en el sistema',
+  fuera_de_horario: 'No hay ningún servicio en ese horario',
+};
+export const detalleFichada = (f) => f?.detalle || DETALLE_GENERAL[f?.resultado] || '';
 export const tonoResultado = (r) => RESULTADOS[r]?.tono || 'muted';
 
 export const hora = (d) =>

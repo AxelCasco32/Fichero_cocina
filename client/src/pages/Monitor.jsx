@@ -5,7 +5,7 @@ import { NavLink } from 'react-router-dom';
 import { api } from '../api.js';
 import { useConectado, useEvento } from '../socket.js';
 import { activos, enLinea, useAhora, useEquipos } from '../equipos.jsx';
-import { hora, hoy, textoResultado, tonoResultado, TZ } from '../util.js';
+import { detalleFichada, hora, hoy, textoResultado, tonoResultado, TZ } from '../util.js';
 import Icono from '../components/Icono.jsx';
 import FichadaManual from '../components/FichadaManual.jsx';
 import { anularFichada } from '../components/acciones.js';
@@ -217,6 +217,7 @@ export default function Monitor() {
                     {ultima.origen === 'manual' && ' · carga manual'}
                   </small>
                 </div>
+                <p className="motivo-grande">{detalleFichada(ultima)}</p>
               </div>
               <div className="arrival-time">
                 <strong>{hora(ultima.fecha).slice(0, 5)}</strong>
@@ -335,6 +336,7 @@ export default function Monitor() {
                           <i />
                           {textoResultado(f.resultado)}
                         </span>
+                        {t !== 'ok' && <small className="motivo-fila">{detalleFichada(f)}</small>}
                       </td>
                       <td>
                         <button className="row-action" onClick={() => anular(f)} aria-label={`Anular fichada de ${f.nombre || f.pin}`}>
