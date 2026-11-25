@@ -150,11 +150,30 @@ async function cantidades(zk) {
 
 // --- Lectura de bloques (usuarios y fichadas) ---
 
+// La librería, al descargar un bloque en partes, deja colgadas escuchas ('data', 'close', 'message')
+// en el socket y nunca las saca. Como las fichadas se descargan seguido, se acumulan (pérdida de
+// memoria, y las viejas siguen procesando todo lo que llega). Acá se sacan las que agregó la operación.
+const EVENTOS_SOCKET = ['data', 'close', 'message', 'end'];
+async function sinEscuchasColgadas(socket, operacion) {
+  if (!socket) return operacion();
+  const antes = new Map(EVENTOS_SOCKET.map((ev) => [ev, new Set(socket.rawListeners(ev))]));
+  try {
+    return await operacion();
+  } finally {
+    for (const ev of EVENTOS_SOCKET) {
+      for (const fn of socket.rawListeners(ev)) if (!antes.get(ev).has(fn)) socket.removeListener(ev, fn);
+    }
+  }
+}
+
 async function leerBloque(zk, pedido) {
   const t = transporte(zk);
-  await t.freeData().catch(() => {});
-  const r = await t.readWithBuffer(pedido);
-  await t.freeData().catch(() => {});
+  const r = await sinEscuchasColgadas(t.socket, async () => {
+    await t.freeData().catch(() => {});
+    const res = await t.readWithBuffer(pedido);
+    await t.freeData().catch(() => {});
+    return res;
+  });
   if (!r || r.err || !Buffer.isBuffer(r.data)) throw r?.err || new Error('el reloj no devolvió datos');
   // Los primeros 4 bytes indican el tamaño de lo que sigue
   const datos = r.data.subarray(4);
