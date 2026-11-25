@@ -18,6 +18,9 @@ const http = require('http');
 const args = process.argv.slice(2);
 const PUERTO = Number(args.find((x) => /^\d+$/.test(x)) || 4370);
 const VIEJO = args.includes('--viejo');
+// --por-partes: manda las descargas grandes en partes (PREPARE_DATA + pedidos DATA_RDY), como los relojes reales
+const POR_PARTES = args.includes('--por-partes');
+let bloquePendiente = null;
 const REGISTRO = VIEJO ? (args.includes('--registro=8') ? 8 : 16) : 40;
 const SN = VIEJO ? 'SIMVIEJO' : 'SIM4370';
 
@@ -25,7 +28,7 @@ const C = {
   CONNECT: 1000, EXIT: 1001, ACK_OK: 2000, OPTIONS_RRQ: 11, GET_VERSION: 1100, FREE_SIZES: 50,
   DATA_WRRQ: 1503, DATA: 1501, FREE_DATA: 1502, USER_WRQ: 8, DELETE_USER: 18, REFRESHDATA: 1013,
   CLEAR_ATTLOG: 15, RESTART: 1004, STARTENROLL: 61, CANCELCAPTURE: 62, GET_USERTEMP: 88, REG_EVENT: 500,
-  ACK_ERROR: 2001, GET_TIME: 201, SET_TIME: 202,
+  ACK_ERROR: 2001, GET_TIME: 201, SET_TIME: 202, PREPARE_DATA: 1500, DATA_RDY: 1504,
 };
 
 // Hora del reloj simulado: --desfase=-23400 lo atrasa 6 h 30 min (en segundos)
@@ -182,13 +185,31 @@ function responder(p, cortar, enviar) {
     case C.GET_VERSION:
       return ok(Buffer.from(VIEJO ? 'Ver 6.60 Sep 27 2010\0' : 'Ver 8.0.4.6-SIM\0'));
     case C.FREE_SIZES: {
+      if (POR_PARTES) return ok(Buffer.alloc(4)); // como el reloj del hospital: no informa cantidades
       const d = Buffer.alloc(80);
       d.writeUInt32LE(usuarios.size, 16);
       d.writeUInt32LE(fichadas.length, 32);
       return ok(d);
     }
-    case C.DATA_WRRQ:
-      return paquete(C.DATA, 1, reply, datos[1] === 0x09 ? bloqueUsuarios() : bloqueFichadas());
+    case C.DATA_WRRQ: {
+      const bloque = datos[1] === 0x09 ? bloqueUsuarios() : bloqueFichadas();
+      if (!POR_PARTES || VIEJO) return paquete(C.DATA, 1, reply, bloque);
+      // Aviso del tamaño; los datos se piden después en partes con DATA_RDY
+      bloquePendiente = bloque;
+      const aviso = Buffer.alloc(12);
+      aviso.writeUInt32LE(bloque.length, 1);
+      return paquete(C.PREPARE_DATA, 1, reply, aviso);
+    }
+    case C.DATA_RDY: {
+      const inicio = datos.readUInt32LE(0);
+      const largo = datos.readUInt32LE(4);
+      const parte = (bloquePendiente || Buffer.alloc(0)).subarray(inicio, inicio + largo);
+      const cabecera = Buffer.alloc(8);
+      cabecera.writeUInt32LE(parte.length, 0);
+      enviar(paquete(C.PREPARE_DATA, 1, reply, cabecera));
+      enviar(paquete(C.DATA, 1, reply, parte));
+      return null;
+    }
     case C.USER_WRQ: {
       const uid = datos.readUInt16LE(0);
       const nombre = VIEJO ? leerTexto(datos.subarray(8, 16)) : leerTexto(datos.subarray(11, 35));
