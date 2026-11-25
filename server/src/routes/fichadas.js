@@ -19,6 +19,22 @@ function rangoDesdeQuery(q) {
   return { $gte: desde.desde, $lt: hasta.hasta };
 }
 
+const MAX_DIAS = 400; // tope de un rango de reporte
+
+// Días 'YYYY-MM-DD' de un rango ?desde=&hasta= (o ?fecha=). null si es inválido.
+function diasDelRango(q) {
+  const d = q.desde || q.fecha || hoy();
+  const h = q.hasta || q.fecha || hoy();
+  if (!rangoDia(d) || !rangoDia(h) || d > h) return null;
+  const dias = [];
+  for (let t = new Date(`${d}T12:00:00Z`); dias.length <= MAX_DIAS; t = new Date(t.getTime() + 86400000)) {
+    const dia = t.toISOString().slice(0, 10);
+    if (dia > h) break;
+    dias.push(dia);
+  }
+  return dias.length > MAX_DIAS ? null : dias;
+}
+
 // "2026-10-30T12:15" (hora local, como la manda un <input type="datetime-local">) -> Date
 function parseFechaLocal(texto) {
   if (!texto) return new Date();
@@ -59,12 +75,12 @@ router.get(
   })
 );
 
-// Fichadas por hora de un día: ?fecha=YYYY-MM-DD
+// Fichadas por hora del día (sumando todos los días del rango): ?fecha= o ?desde=&hasta=
 router.get(
   '/por-hora',
   a(async (req, res) => {
-    const fecha = rangoDesdeQuery({ fecha: req.query.fecha });
-    if (!fecha) return res.status(400).json({ error: 'Fecha inválida (YYYY-MM-DD)' });
+    const fecha = diasDelRango(req.query) && rangoDesdeQuery(req.query);
+    if (!fecha) return res.status(400).json({ error: 'Fechas inválidas (YYYY-MM-DD)' });
 
     // Un día de comedor son cientos de fichadas: agrupamos en Node (sirve en cualquier versión de Mongo)
     const fichadas = await Fichada.find({ fecha, ...NO_ANULADA }, 'fecha resultado').lean();
@@ -79,14 +95,40 @@ router.get(
   })
 );
 
-// Resumen del día por servicio: ?fecha=YYYY-MM-DD
+// Fichadas por día de un rango: ?desde=&hasta= → [{ dia, total, autorizado, ya_retiro, ... }]
+router.get(
+  '/por-dia',
+  a(async (req, res) => {
+    const dias = diasDelRango(req.query);
+    if (!dias) return res.status(400).json({ error: `Rango inválido (YYYY-MM-DD, hasta ${MAX_DIAS} días)` });
+    const fichadas = await Fichada.find(
+      { dia: { $gte: dias[0], $lte: dias[dias.length - 1] }, ...NO_ANULADA },
+      'dia resultado'
+    ).lean();
+    const filas = new Map(dias.map((dia) => [dia, { dia, total: 0 }]));
+    for (const f of fichadas) {
+      const fila = filas.get(f.dia);
+      if (!fila) continue;
+      fila[f.resultado] = (fila[f.resultado] || 0) + 1;
+      fila.total++;
+    }
+    res.json([...filas.values()]);
+  })
+);
+
+// Resumen por servicio de un día (?fecha=) o de un rango (?desde=&hasta=)
 router.get(
   '/resumen',
   a(async (req, res) => {
-    const dia = req.query.fecha || hoy();
-    if (!rangoDia(dia)) return res.status(400).json({ error: 'Fecha inválida (YYYY-MM-DD)' });
+    const dias = diasDelRango(req.query);
+    if (!dias) return res.status(400).json({ error: 'Fechas inválidas (YYYY-MM-DD)' });
+    const dia = dias[0];
+    const filtroDia = dias.length === 1 ? dia : { $gte: dias[0], $lte: dias[dias.length - 1] };
 
-    const fichadas = await Fichada.find({ dia, ...NO_ANULADA }, 'servicio resultado').lean();
+    const [fichadas, ultimaFuera] = await Promise.all([
+      Fichada.find({ dia: filtroDia, ...NO_ANULADA }, 'servicio resultado').lean(),
+      Fichada.findOne({ dia: filtroDia, resultado: 'fuera_de_horario', ...NO_ANULADA }, 'fecha').sort({ fecha: -1 }).lean(),
+    ]);
     const servicios = [...SERVICIOS, { codigo: null, nombre: 'Fuera de horario' }].map((s) => ({
       ...s,
       total: 0,
@@ -98,7 +140,7 @@ router.get(
       s.porResultado[f.resultado] = (s.porResultado[f.resultado] || 0) + 1;
       s.total++;
     }
-    res.json({ dia, servicios });
+    res.json({ dia, desde: dias[0], hasta: dias[dias.length - 1], servicios, ultimaFueraDeHorario: ultimaFuera?.fecha || null });
   })
 );
 

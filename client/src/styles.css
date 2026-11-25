@@ -81,18 +81,6 @@ td.acciones button + button { margin-left: 0.35rem; }
 .tabs button { border: none; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 0.5rem 0.9rem; color: var(--suave); }
 .tabs button.activa { border-bottom-color: var(--primario); color: var(--primario); font-weight: 600; }
 
-/* Gráfico por hora */
-.grafico { display: flex; align-items: flex-end; gap: 4px; height: 220px; padding: 0.5rem 0 0; border-bottom: 1px solid var(--borde); }
-.grafico .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; position: relative; }
-.grafico .seg.ok { background: var(--ok); }
-.grafico .seg.err { background: var(--err); }
-.grafico .seg.otro { background: #b9c4c0; }
-.grafico .col .num { position: absolute; top: -1.1rem; width: 100%; text-align: center; font-size: 0.7rem; color: var(--suave); }
-.grafico .seg:first-child { border-radius: 4px 4px 0 0; }
-.ejes { display: flex; gap: 4px; }
-.ejes span { flex: 1; text-align: center; font-size: 0.7rem; color: var(--suave); padding-top: 0.25rem; }
-.leyenda { display: flex; gap: 1rem; font-size: 0.85rem; color: var(--suave); margin-top: 0.5rem; }
-.leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 0.3rem; }
 
 /* Modal */
 .fondo-modal { position: fixed; inset: 0; background: rgba(15, 30, 26, 0.45); display: grid; place-items: center; padding: 1rem; z-index: 10; }

@@ -1,0 +1,123 @@
+/* Reportes de BioCook (rediseño). Usa la base de Monitor.css (.bc-monitor) y agrega lo propio en .bc-reportes. */
+.bc-reportes .report-topbar { margin-bottom: 18px; flex-wrap: wrap; }
+.bc-reportes .report-topbar .eyebrow { color: #7b8e89; }
+.bc-reportes .top-actions { flex-wrap: wrap; justify-content: flex-end; }
+
+.bc-reportes .period-switch { height: 40px; display: flex; align-items: center; padding: 3px; border: 1px solid #dbe4e1; border-radius: 10px; background: #e9efed; }
+.bc-reportes .period-switch button { height: 32px; padding: 0 13px; border-radius: 7px; color: #71837e; font-size: 13px; font-weight: 700; transition: .2s; }
+.bc-reportes .period-switch button:hover { color: #1d5f50; }
+.bc-reportes .period-switch button.active { color: #1d5f50; background: #fff; box-shadow: 0 2px 7px rgba(39,67,61,.1); }
+
+/* Botón de fecha: el <input type="date"> va encima, invisible, para usar el calendario del navegador */
+.bc-reportes .report-date { position: relative; height: 40px; display: flex; align-items: center; gap: 7px; padding: 0 13px; border: 1px solid #dde6e3; border-radius: 10px; color: #536b66; background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.bc-reportes .report-date:hover { border-color: #64ad9a; }
+.bc-reportes .report-date input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.bc-reportes .report-date input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; }
+.bc-reportes .report-date:focus-within { border-color: #42a58b; box-shadow: 0 0 0 3px rgba(38,143,115,.12); }
+
+/* Indicadores */
+.bc-reportes .report-kpis { max-width: 1440px; margin: 0 auto 14px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.bc-reportes .report-kpis article { min-height: 110px; display: flex; align-items: center; gap: 14px; padding: 18px; border: 1px solid #dfe7e4; border-radius: 14px; background: #fff; box-shadow: 0 4px 15px rgba(43,72,65,.035); animation: bc-card-in .45s ease both; transition: .2s; }
+.bc-reportes .report-kpis article:nth-child(2) { animation-delay: 60ms; }
+.bc-reportes .report-kpis article:nth-child(3) { animation-delay: 120ms; }
+.bc-reportes .report-kpis article:nth-child(4) { animation-delay: 180ms; }
+.bc-reportes .report-kpis article:hover { transform: translateY(-2px); box-shadow: 0 9px 24px rgba(43,72,65,.07); }
+.bc-reportes .kpi-icon { flex: 0 0 42px; width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; }
+.bc-reportes .kpi-icon.green { color: #178263; background: #e6f6f0; }
+.bc-reportes .kpi-icon.teal { color: #287e85; background: #e6f3f4; }
+.bc-reportes .kpi-icon.red { color: #c84b42; background: #ffebe8; }
+.bc-reportes .kpi-icon.slate { color: #647a75; background: #edf2f1; }
+.bc-reportes .report-kpis span { display: block; color: #788b86; font-size: 13px; font-weight: 600; }
+.bc-reportes .report-kpis strong { display: block; margin: 2px 0; color: #1f3a35; font: 800 28px 'Manrope', 'Segoe UI', system-ui, sans-serif; }
+.bc-reportes .report-kpis small { color: #8b9a96; font-size: 12px; }
+.bc-reportes .report-kpis small b { color: #21866b; }
+.bc-reportes .report-kpis small b.baja { color: #c84b42; }
+
+/* Tarjetas */
+.bc-reportes .report-card { max-width: 1440px; margin: 0 auto 14px; border: 1px solid #dfe7e4; border-radius: 15px; background: #fff; box-shadow: 0 5px 20px rgba(43,72,65,.035); overflow: hidden; animation: bc-card-in .5s ease both; }
+.bc-reportes .report-card-head { min-height: 66px; display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 14px 20px; border-bottom: 1px solid #e8eeec; flex-wrap: wrap; }
+.bc-reportes .report-card-head h2 { color: #223c37; font: 800 17px 'Manrope', 'Segoe UI', system-ui, sans-serif; }
+.bc-reportes .report-card-head p { margin-top: 3px; color: #8a9a96; font-size: 12px; }
+
+/* Gráfico */
+.bc-reportes .chart-legend { display: flex; gap: 14px; color: #70827d; font-size: 12px; font-weight: 600; flex-wrap: wrap; }
+.bc-reportes .chart-legend span { display: flex; align-items: center; gap: 6px; }
+.bc-reportes .chart-legend i { width: 9px; height: 9px; border-radius: 2px; }
+.bc-reportes .chart-legend .ok, .bc-reportes .bar.ok { background: #229c72; }
+.bc-reportes .chart-legend .denied, .bc-reportes .bar.denied { background: #e05349; }
+.bc-reportes .chart-legend .late, .bc-reportes .bar.late { background: #9aa8a5; }
+.bc-reportes .chart-body { height: 230px; display: flex; padding: 22px 22px 13px 14px; }
+.bc-reportes .y-axis { width: 30px; display: flex; flex-direction: column; justify-content: space-between; padding: 0 6px 23px 0; color: #9ba9a6; font-size: 11px; text-align: right; }
+.bc-reportes .bars { flex: 1; display: flex; align-items: stretch; justify-content: space-around; gap: 2px; border-bottom: 1px solid #dfe6e4; background: linear-gradient(to bottom, #eef2f0 1px, transparent 1px) 0 0 / 100% calc((100% - 23px) / 3); }
+.bc-reportes .bar-column { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.bc-reportes .bar-column small { height: 23px; padding-top: 6px; color: #82948f; font-size: 11px; white-space: nowrap; }
+.bc-reportes .bar-stack { position: relative; flex: 1; width: min(36px, 72%); display: flex; flex-direction: column-reverse; }
+.bc-reportes .bar { display: block; width: 100%; min-height: 2px; animation: bc-grow-bar .6s cubic-bezier(.2,.8,.2,1) both; transform-origin: bottom; }
+.bc-reportes .bar-stack .bar:last-child { border-radius: 4px 4px 0 0; }
+.bc-reportes .bar-total { position: absolute; left: 50%; margin-bottom: 3px; transform: translateX(-50%); color: #536b66; font-size: 11px; font-weight: 700; }
+@keyframes bc-grow-bar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+
+/* Resumen por servicio */
+.bc-reportes .breakdown-list { padding: 0 20px 10px; }
+.bc-reportes .breakdown-row { min-height: 48px; display: grid; grid-template-columns: 1.8fr repeat(6, 1fr); align-items: center; gap: 8px; border-bottom: 1px solid #edf1ef; color: #566d68; font-size: 14px; }
+.bc-reportes .breakdown-row:last-child { border-bottom: 0; }
+.bc-reportes .breakdown-row > div strong { display: block; color: #29433e; font-size: 14px; }
+.bc-reportes .breakdown-row > div small { color: #92a19d; font-size: 12px; }
+.bc-reportes .breakdown-row > strong { color: #253f3a; font-size: 15px; }
+.bc-reportes .breakdown-header { min-height: 40px; color: #869691; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .45px; }
+.bc-reportes .danger-number { color: #ce443b !important; font-weight: 800; }
+
+/* Detalle */
+.bc-reportes .report-filters { margin-left: auto; display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.bc-reportes .compact-select span { display: block; margin: 0 0 4px 2px; color: #8b9a96; font-size: 11px; font-weight: 700; }
+.bc-reportes .compact-select select, .bc-reportes .compact-select input { width: 150px; height: 36px; padding: 0 9px; border: 1px solid #dce5e2; border-radius: 8px; color: #526964; background: #fff; font-size: 13px; }
+.bc-reportes .compact-select input { width: 100px; }
+.bc-reportes .compact-select select:focus, .bc-reportes .compact-select input:focus { border-color: #42a58b; box-shadow: 0 0 0 3px rgba(38,143,115,.1); }
+.bc-reportes .export-button { height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border: 1px solid #bedbd3; border-radius: 8px; color: #19715d; background: #f2faf7; font-size: 13px; font-weight: 800; transition: .2s; }
+.bc-reportes .export-button:hover:not(:disabled) { background: #e4f5ef; }
+.bc-reportes .export-button:disabled { opacity: .5; cursor: default; }
+.bc-reportes .fila-anulada td { opacity: .55; }
+.bc-reportes .fila-anulada .person-cell strong, .bc-reportes .fila-anulada .time-cell { text-decoration: line-through; }
+.bc-reportes .acciones-anulada { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.bc-reportes .acciones-anulada small { font-size: 11.5px; color: #8b9a96; }
+.bc-reportes td small { font-size: 11.5px; }
+.bc-reportes .paginador { display: flex; align-items: center; gap: 12px; }
+.bc-reportes .paginador button { display: flex; align-items: center; gap: 3px; color: #19715e; font-weight: 700; }
+.bc-reportes .paginador button:disabled { color: #a8b5b2; cursor: default; }
+
+@media (max-width: 1050px) {
+  .bc-reportes .report-kpis { grid-template-columns: repeat(2, 1fr); }
+  .bc-reportes .report-filters { margin-left: 0; justify-content: flex-start; }
+}
+
+@media (max-width: 760px) {
+  .bc-reportes .top-actions { width: 100%; justify-content: flex-start; gap: 6px; }
+  .bc-reportes .period-switch { flex: 1 1 100%; }
+  .bc-reportes .period-switch button { flex: 1; }
+  .bc-reportes .report-date { flex: 1; justify-content: center; }
+  .bc-reportes .report-manual { font-size: 0; width: 42px; padding: 0; }
+  .bc-reportes .report-kpis { gap: 9px; }
+  .bc-reportes .report-kpis article { min-height: 96px; padding: 14px; }
+  .bc-reportes .compact-select { flex: 1 1 140px; }
+  .bc-reportes .compact-select select, .bc-reportes .compact-select input { width: 100%; }
+  .bc-reportes .chart-legend { gap: 9px; font-size: 11px; }
+  .bc-reportes .chart-body { padding-right: 8px; }
+  .bc-reportes .bar-column small { font-size: 9px; }
+  .bc-reportes .bar-total { font-size: 9px; }
+  .bc-reportes .breakdown-list { padding: 0 14px 8px; }
+  .bc-reportes .breakdown-header { display: none; }
+  .bc-reportes .breakdown-row { grid-template-columns: 1fr repeat(4, auto); gap: 12px; padding: 10px 0; }
+  .bc-reportes .breakdown-row > span:nth-of-type(3), .bc-reportes .breakdown-row > span:nth-of-type(5) { display: none; }
+  .bc-reportes .breakdown-row > span::before, .bc-reportes .breakdown-row > strong::before { content: attr(data-label); display: block; color: #9aa8a5; font-size: 10px; font-weight: 700; }
+  .bc-reportes .export-button { width: 100%; justify-content: center; }
+  .bc-reportes .panel-footer { flex-wrap: wrap; gap: 8px; padding: 10px 14px; }
+  .bc-reportes .panel-footer > span:first-child { display: block; }
+}
+
+@media (max-width: 500px) {
+  .bc-reportes .report-kpis article { display: block; position: relative; }
+  .bc-reportes .kpi-icon { position: absolute; right: 11px; top: 11px; width: 34px; height: 34px; }
+  .bc-reportes .report-kpis strong { font-size: 24px; }
+  .bc-reportes .report-kpis small { display: block; max-width: 120px; }
+  .bc-reportes .chart-body { height: 190px; }
+}
