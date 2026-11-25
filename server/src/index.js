@@ -33,11 +33,21 @@ async function main() {
   const io = new Server(server, { cors: { origin: config.corsOrigin } });
   io.use(async (socket, next) => {
     const op = await operadorDesdeToken(socket.handshake.auth?.token);
-    if (!op) return next(new Error('No autenticado'));
+    if (!op) {
+      console.log('[tiempo real] conexión rechazada: sesión vencida o inválida (hay que volver a iniciar sesión)');
+      return next(new Error('No autenticado'));
+    }
     socket.data.operador = op;
     next();
   });
-  io.on('connection', (socket) => socket.join('operadores'));
+  io.on('connection', (socket) => {
+    socket.join('operadores');
+    const quien = socket.data.operador?.usuario || '?';
+    console.log(`[tiempo real] pantalla conectada (${quien}) · ${tiempoReal.conectadas()} en vivo`);
+    socket.on('disconnect', (motivo) => {
+      console.log(`[tiempo real] pantalla desconectada (${quien}, ${motivo}) · ${tiempoReal.conectadas()} en vivo`);
+    });
+  });
   tiempoReal.setIO(io);
 
   server.listen(config.port, '0.0.0.0', async () => {

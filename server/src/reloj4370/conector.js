@@ -244,7 +244,26 @@ class Conector {
       // Rutina: lo que se agregó al final de la memoria del reloj desde la última lectura.
       // Si ahora hay menos registros, la memoria se vació (desde otro programa): se toma lo que haya.
       rutina = true;
-      nuevas = registros.length >= leidas ? registros.slice(leidas) : registros;
+      const alFinal = registros.length >= leidas ? registros.slice(leidas) : registros;
+      // Además, lo de los últimos 2 días que todavía no esté guardado (por si el reloj no agrega
+      // siempre al final). Los que ya están se descartan acá; los toques dobles, al guardar.
+      // Solo desde que este conector arrancó (lo anterior lo cubre la lectura por posición)
+      const corte = new Date(Math.max(Date.now() - 2 * 86400000, this.inicio.getTime() - 10 * 60 * 1000));
+      const recientes = registros.filter((r) => r.fecha >= corte);
+      let faltantes = [];
+      if (recientes.length) {
+        const desdeFecha = new Date(Math.min(...recientes.map((r) => r.fecha.getTime())));
+        const guardadas = await Fichada.find({ deviceSn: this.sn, fecha: { $gte: desdeFecha } }, 'pin fecha').lean();
+        const ya = new Set(guardadas.map((f) => `${f.pin}|${new Date(f.fecha).getTime()}`));
+        faltantes = recientes.filter((r) => !ya.has(`${r.pin}|${r.fecha.getTime()}`));
+      }
+      const vistos = new Set();
+      nuevas = [...alFinal, ...faltantes].filter((r) => {
+        const k = `${r.pin}|${r.fecha.getTime()}`;
+        if (vistos.has(k)) return false;
+        vistos.add(k);
+        return true;
+      });
     } else if (!forzar && disp?.ultimaFichada) {
       // Equipos que todavía no tienen la cuenta de registros: lo de hoy en adelante y lo posterior
       // a la última fichada, sin confiar en fechas futuras (reloj que estuvo adelantado).

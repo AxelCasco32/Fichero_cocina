@@ -87,6 +87,7 @@ async function registrarFichadas(deviceSn, registros, opciones = {}) {
     .sort((a, b) => a.fecha - b.fecha);
 
   let guardadas = 0;
+  let sinAviso = 0; // historial: se guarda sin avisar al monitor
   for (const r of ordenados) {
     // Reenvío exacto de una fichada ya guardada
     if (await Fichada.exists({ deviceSn, pin: r.pin, fecha: r.fecha })) continue;
@@ -109,9 +110,13 @@ async function registrarFichadas(deviceSn, registros, opciones = {}) {
       });
       guardadas++;
       if (!opciones.emitirDesde || r.fecha >= opciones.emitirDesde) tiempoReal.emitir('fichada', doc.toJSON());
+      else sinAviso++;
     } catch (err) {
       if (err.code !== 11000) throw err; // 11000 = duplicada, se ignora
     }
+  }
+  if (sinAviso) {
+    console.log(`[fichadas] ${sinAviso} guardadas como historial, sin aviso en vivo (fecha del reloj de hace más de 10 min)`);
   }
   return guardadas;
 }
